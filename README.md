@@ -15,34 +15,25 @@ X-Fusion Panel 是一个基于 Python 的面板项目，当前仓库已适配为
 
 ## 本地运行方式
 
-1. 创建虚拟环境并安装依赖：
+可使用一条命令完成本地环境初始化并启动：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r app/requirements.txt
-```
-
-2. 启动项目：
-
-```bash
-python app/main.py
+python3 -m venv .venv && source .venv/bin/activate && pip install -r app/requirements.txt && python app/main.py
 ```
 
 ## Docker / docker-compose 运行方式
 
 ### Docker
 
-在项目根目录执行：
+在项目根目录可使用一条命令完成构建并启动：
 
 ```bash
-docker build -t x-fusion-panel:local .
-docker run --rm -p 8080:8080 x-fusion-panel:local
+docker build -t x-fusion-panel:local . && docker run --rm -p 8080:8080 x-fusion-panel:local
 ```
 
 ### Docker Compose
 
-如果项目根目录已有 `docker-compose.yml`，可直接执行：
+如果项目根目录已有 `docker-compose.yml`，可直接一条命令启动：
 
 ```bash
 docker compose up -d --build
@@ -50,19 +41,16 @@ docker compose up -d --build
 
 ## install.sh 使用方式
 
-适用于 VPS 一键安装 / 更新：
+适用于 VPS 一键安装 / 更新，可直接远程一条命令执行：
 
 ```bash
-chmod +x install.sh
-sudo ./install.sh
+bash <(curl -Ls https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh)
 ```
 
-如需远程执行，可使用：
+如需先下载后再手动执行，也可使用：
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh
-chmod +x install.sh
-sudo ./install.sh
+wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh && chmod +x install.sh && sudo ./install.sh
 ```
 
 脚本会拉取完整仓库源码，并通过本地 `Dockerfile` 构建运行。
