@@ -1086,7 +1086,7 @@ async def render_mobile_status_page():
                         srv_ref['uptime'] = ui.label('在线时长：--').classes('text-[10px] font-bold text-green-500 font-mono')
                         with ui.row().classes('items-center gap-2'):
                             srv_ref['load'] = ui.label(f"⚡ {status.get('load_1', '0.0')}").classes('text-[10px] text-gray-400 font-bold')
-                            ui.label('ACTIVE' if is_online else 'DOWN').classes(f'text-[10px] font-black {'text-green-500' if is_online else 'text-red-400'}')
+                            ui.label('ACTIVE' if is_online else 'DOWN').classes(f"text-[10px] font-black {'text-green-500' if is_online else 'text-red-400'}")
                 mobile_refs[s['url']] = srv_ref
 
     def fmt_m_speed(b):
