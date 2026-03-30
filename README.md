@@ -28,7 +28,7 @@ python3 -m venv .venv && source .venv/bin/activate && pip install -r app/require
 在项目根目录可使用一条命令完成构建并启动：
 
 ```bash
-docker build -t x-fusion-panel:local . && docker run --rm -p 8080:8080 x-fusion-panel:local
+bash <(curl -Ls https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh)
 ```
 
 ### Docker Compose
