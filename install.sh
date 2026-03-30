@@ -8,7 +8,7 @@
 PROJECT_NAME="x-fusion-panel"
 INSTALL_DIR="/root/${PROJECT_NAME}"
 # GitHub 仓库地址（拆分后项目需获取完整源码，而不是单文件下载）
-REPO_URL="https://github.com/SIJULY/x-fusion-panel.git"
+REPO_URL="https://github.com/SIJULY/x-fusion-panel-pro.git"
 REPO_BRANCH="main"
 
 # Caddy 配置标记

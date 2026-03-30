@@ -60,7 +60,7 @@ sudo ./install.sh
 如需远程执行，可使用：
 
 ```bash
-wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel/main/install.sh
+wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh
 chmod +x install.sh
 sudo ./install.sh
 ```
