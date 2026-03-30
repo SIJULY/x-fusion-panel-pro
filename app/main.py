@@ -7,6 +7,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 STATIC_DIR = PROJECT_ROOT / 'static'
 
+from fastapi import Request
 from nicegui import app, ui
 
 
@@ -34,7 +35,7 @@ register_static_files()
 
 
 @app.post('/api/probe/push')
-async def api_probe_push(request):
+async def api_probe_push(request: Request):
     return await probe_push_data(request)
 
 
