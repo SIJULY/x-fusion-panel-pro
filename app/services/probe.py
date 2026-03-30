@@ -104,7 +104,13 @@ async def install_probe_on_server(server_conf):
             stdin, stdout, stderr = client.exec_command(real_script, timeout=60)
             exit_status = stdout.channel.recv_exit_status()
             if exit_status == 0:
-                return True, "Agent 安装成功并启动"
+                verify_cmd = "test -f /root/x_fusion_agent.py && test -f /etc/systemd/system/x-fusion-agent.service && systemctl is-active --quiet x-fusion-agent"
+                _, verify_stdout, verify_stderr = client.exec_command(verify_cmd, timeout=20)
+                verify_status = verify_stdout.channel.recv_exit_status()
+                if verify_status == 0:
+                    return True, "Agent 安装成功并启动"
+                verify_error = verify_stderr.read().decode().strip()
+                return False, f"安装后校验失败 (Exit {verify_status}){': ' + verify_error if verify_error else ''}"
             return False, f"安装脚本错误 (Exit {exit_status})"
         except Exception as e:
             return False, f"异常: {str(e)}"
