@@ -7,7 +7,7 @@ services:
     container_name: x-fusion-panel
     restart: always
     ports:
-      - "127.0.0.1:8081:8080"
+      - "0.0.0.0:8081:8080"
     volumes:
       - ./data:/app/data
     environment:
@@ -24,17 +24,3 @@ services:
       - "25500"
     environment:
       - TZ=Asia/Shanghai
-
-  caddy:
-    image: caddy:latest
-    container_name: caddy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./caddy_data:/data
-    depends_on:
-      - x-fusion-panel
-      - subconverter
