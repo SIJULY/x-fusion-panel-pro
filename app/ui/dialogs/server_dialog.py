@@ -50,6 +50,14 @@ echo "Xray Service Uninstalled (Binary kept safe)"
 
 
 async def save_server_config(server_data, is_add=True, idx=None):
+    client = None
+    try:
+        client = ui.context.client
+    except:
+        pass
+
+    logger.info(f"[SaveServerDialog] save_server_config called | is_add={is_add} idx={idx} client_present={client is not None} servers_before={len(SERVERS_CACHE)} url={server_data.get('url')} name={server_data.get('name')}")
+
     if not server_data.get('name') or not server_data.get('url'):
         safe_notify("名称和地址不能为空", "negative")
         return False
@@ -83,6 +91,7 @@ async def save_server_config(server_data, is_add=True, idx=None):
             return False
 
     await save_servers()
+    logger.info(f"[SaveServerDialog] save_servers done | servers_after={len(SERVERS_CACHE)} rows_refs={len(SIDEBAR_UI_REFS.get('rows', {}))} group_refs={len(SIDEBAR_UI_REFS.get('groups', {}))}")
 
     new_group = server_data.get('group', '默认分组')
     if new_group in ['默认分组', '自动注册', '未分组', '自动导入']:
@@ -115,11 +124,18 @@ async def save_server_config(server_data, is_add=True, idx=None):
         logger.error(f"UI Move Error: {e}")
         need_full_refresh = True
 
+    logger.info(f"[SaveServerDialog] sidebar refresh decision | need_full_refresh={need_full_refresh} new_group={new_group} rows_refs={len(SIDEBAR_UI_REFS.get('rows', {}))} group_refs={len(SIDEBAR_UI_REFS.get('groups', {}))}")
     if need_full_refresh:
         try:
-            render_sidebar_content.refresh()
-        except:
-            pass
+            logger.info(f"[SaveServerDialog] calling render_sidebar_content.refresh | client_present={client is not None}")
+            if client:
+                with client:
+                    render_sidebar_content.refresh()
+            else:
+                render_sidebar_content.refresh()
+            logger.info("[SaveServerDialog] render_sidebar_content.refresh returned")
+        except Exception as e:
+            logger.error(f"[SaveServerDialog] render_sidebar_content.refresh failed: {e}")
 
     current_scope = CURRENT_VIEW_STATE.get('scope')
     current_data = CURRENT_VIEW_STATE.get('data')
@@ -141,9 +157,15 @@ async def save_server_config(server_data, is_add=True, idx=None):
             pass
     elif current_scope == 'DASHBOARD':
         try:
-            await refresh_dashboard_ui()
-        except:
-            pass
+            logger.info(f"[SaveServerDialog] calling refresh_dashboard_ui | client_present={client is not None} current_scope={current_scope}")
+            if client:
+                with client:
+                    await refresh_dashboard_ui()
+            else:
+                await refresh_dashboard_ui()
+            logger.info("[SaveServerDialog] refresh_dashboard_ui returned")
+        except Exception as e:
+            logger.error(f"[SaveServerDialog] refresh_dashboard_ui failed: {e}")
 
     asyncio.create_task(fast_resolve_single_server(server_data))
 

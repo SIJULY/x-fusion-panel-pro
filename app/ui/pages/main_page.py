@@ -137,6 +137,7 @@ def main_page(request: Request):
     from app.ui.pages import content_router
 
     content_router.content_container = ui.column().classes('w-full h-full pl-4 pr-4 pt-4 overflow-y-auto bg-[#0f172a]')
+    logger.info(f"[MainPage] content_container assigned | id={id(content_router.content_container)}")
 
     async def auto_init_system_settings():
         try:
@@ -175,6 +176,8 @@ def main_page(request: Request):
         from app.ui.pages.probe_page import render_probe_page
         from app.ui.pages.subs_page import load_subs_view
 
+        logger.info(f"[MainPage] restore_last_view start | stored_scope={app.storage.user.get('last_view_scope', 'DASHBOARD')} stored_data={app.storage.user.get('last_view_data', None)} content_container_id={id(content_router.content_container) if content_router.content_container else None}")
+
         last_scope = app.storage.user.get('last_view_scope', 'DASHBOARD')
         last_data_id = app.storage.user.get('last_view_data', None)
         target_data = last_data_id
@@ -184,12 +187,16 @@ def main_page(request: Request):
                 last_scope = 'DASHBOARD'
 
         if last_scope == 'DASHBOARD':
+            logger.info("[MainPage] restore_last_view branch=DASHBOARD")
             await load_dashboard_stats()
         elif last_scope == 'PROBE':
+            logger.info("[MainPage] restore_last_view branch=PROBE")
             await render_probe_page()
         elif last_scope == 'SUBS':
+            logger.info("[MainPage] restore_last_view branch=SUBS")
             await load_subs_view()
         else:
+            logger.info(f"[MainPage] restore_last_view branch={last_scope} target_data={target_data}")
             await refresh_content(last_scope, target_data)
         logger.info(f'♻️ 自动恢复视图: {last_scope}')
 

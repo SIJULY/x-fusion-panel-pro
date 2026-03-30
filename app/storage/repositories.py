@@ -29,10 +29,6 @@ async def save_servers():
     await safe_save(CONFIG_FILE, state.SERVERS_CACHE)
     state.GLOBAL_UI_VERSION = time.time()
 
-    from app.ui.components.dashboard import refresh_dashboard_ui
-
-    await refresh_dashboard_ui()
-
 
 async def save_admin_config():
     await safe_save(ADMIN_CONFIG_FILE, state.ADMIN_CONFIG)
@@ -47,9 +43,5 @@ async def save_nodes_cache():
     try:
         data_snapshot = state.NODES_DATA.copy()
         await safe_save(NODES_CACHE_FILE, data_snapshot)
-
-        from app.ui.components.dashboard import refresh_dashboard_ui
-
-        await refresh_dashboard_ui()
     except Exception as e:
         logger.error(f"❌ 保存缓存失败: {e}")

@@ -17,27 +17,31 @@ def init_data():
     logger.info(f"正在读取数据... (目标: {DATA_DIR})")
 
     # 1. 加载服务器
+    state.SERVERS_CACHE.clear()
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 raw_data = json.load(f)
-                state.SERVERS_CACHE = [s for s in raw_data if isinstance(s, dict)]
+                state.SERVERS_CACHE.extend([s for s in raw_data if isinstance(s, dict)])
             logger.info(f"✅ 成功加载服务器: {len(state.SERVERS_CACHE)} 台")
         except Exception as e:
             logger.error(f"❌ 读取 servers.json 失败: {e}")
-            state.SERVERS_CACHE = []
     else:
         logger.warning(f"⚠️ 未找到服务器配置文件: {CONFIG_FILE}")
 
     # 2. 加载订阅
+    state.SUBS_CACHE.clear()
     if os.path.exists(SUBS_FILE):
         try:
             with open(SUBS_FILE, 'r', encoding='utf-8') as f:
-                state.SUBS_CACHE = json.load(f)
+                loaded_subs = json.load(f)
+                if isinstance(loaded_subs, list):
+                    state.SUBS_CACHE.extend(loaded_subs)
         except:
-            state.SUBS_CACHE = []
+            pass
 
     # 3. 加载缓存
+    state.NODES_DATA.clear()
     if os.path.exists(NODES_CACHE_FILE):
         # 处理之前误生成的文件夹
         if os.path.isdir(NODES_CACHE_FILE):
@@ -47,25 +51,27 @@ def init_data():
                 logger.info("♻️ 已自动删除错误的缓存文件夹")
             except:
                 pass
-            state.NODES_DATA = {}
         else:
             try:
                 with open(NODES_CACHE_FILE, 'r', encoding='utf-8') as f:
-                    state.NODES_DATA = json.load(f)
+                    loaded_nodes = json.load(f)
+                    if isinstance(loaded_nodes, dict):
+                        state.NODES_DATA.update(loaded_nodes)
                 count = sum([len(v) for v in state.NODES_DATA.values() if isinstance(v, list)])
                 logger.info(f"✅ 加载缓存节点: {count} 个")
             except:
-                state.NODES_DATA = {}
-    else:
-        state.NODES_DATA = {}
+                pass
 
     # 4. 加载配置
+    state.ADMIN_CONFIG.clear()
     if os.path.exists(ADMIN_CONFIG_FILE):
         try:
             with open(ADMIN_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                state.ADMIN_CONFIG = json.load(f)
+                loaded_admin_config = json.load(f)
+                if isinstance(loaded_admin_config, dict):
+                    state.ADMIN_CONFIG.update(loaded_admin_config)
         except:
-            state.ADMIN_CONFIG = {}
+            pass
 
     # 初始化设置
     if 'probe_enabled' not in state.ADMIN_CONFIG:

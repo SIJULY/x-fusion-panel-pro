@@ -9,9 +9,10 @@ STATIC_DIR = PROJECT_ROOT / 'static'
 
 from nicegui import app, ui
 
-ui.add_static_files('/static', str(PROJECT_ROOT / 'static'))
 
-app.add_static_files('/static', str(PROJECT_ROOT / 'static'))
+def register_static_files() -> None:
+    if STATIC_DIR.exists():
+        app.add_static_files('/static', str(STATIC_DIR))
 
 from app.api.auth import register_auth_pages
 from app.api.notifications import send_telegram_message
@@ -24,11 +25,12 @@ from app.api.subscriptions import (
 )
 from app.core.logging import logger
 from app.jobs.startup import startup_sequence
+from app.services.dashboard import get_dashboard_live_data
 from app.services.probe import auto_register_node, probe_push_data, probe_register
 from app.storage.bootstrap import init_data
 
 
-app.add_static_files('/static', str(PROJECT_ROOT / 'static'))
+register_static_files()
 
 
 @app.post('/api/probe/push')
@@ -66,10 +68,13 @@ async def api_short_group_handler(target: str, group_b64: str, request):
     return await short_group_handler(target, group_b64, request)
 
 
+@app.get('/api/dashboard/live_data')
+def api_dashboard_live_data():
+    return get_dashboard_live_data()
+
+
 def bootstrap_app():
     logger.info('🚀 系统正在初始化...')
-    if STATIC_DIR.exists():
-        app.add_static_files('/static', str(STATIC_DIR))
     init_data()
     register_auth_pages()
     register_status_page()

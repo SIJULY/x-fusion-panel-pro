@@ -54,15 +54,6 @@ async def force_geoip_naming_task(server_conf, max_retries=10):
 
                     await save_servers()
 
-                    from app.ui.components.dashboard import refresh_dashboard_ui
-                    from app.ui.components.sidebar import render_sidebar_content
-
-                    await refresh_dashboard_ui()
-                    try:
-                        render_sidebar_content.refresh()
-                    except:
-                        pass
-
                     logger.info(f"✅ [强制修正] 成功: {old_name} -> {final_name} (第 {i+1} 次尝试)")
                     return
 
@@ -217,15 +208,6 @@ async def fast_resolve_single_server(s):
 
         if data_changed:
             await save_servers()
-
-            from app.ui.components.dashboard import refresh_dashboard_ui
-            from app.ui.components.sidebar import render_sidebar_content
-
-            await refresh_dashboard_ui()
-            try:
-                render_sidebar_content.refresh()
-            except:
-                pass
             logger.info(f"✅ [智能修正] 完毕: {s['name']} -> [{s['group']}]")
 
     except Exception as e:

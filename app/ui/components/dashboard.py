@@ -182,11 +182,15 @@ GLOBE_JS_LOGIC = r"""
 
 async def refresh_dashboard_ui():
     try:
+        logger.info(f"[Dashboard] refresh_dashboard_ui called | scope={CURRENT_VIEW_STATE.get('scope')} servers_cache={len(SERVERS_CACHE)} refs_keys={list(DASHBOARD_REFS.keys())}")
         if not DASHBOARD_REFS.get('servers'):
+            logger.info("[Dashboard] refresh_dashboard_ui skipped | servers ref missing")
             return
 
         data = calculate_dashboard_data()
+        logger.info(f"[Dashboard] refresh_dashboard_ui data={data}")
         if not data:
+            logger.info("[Dashboard] refresh_dashboard_ui skipped | data missing")
             return
 
         if DASHBOARD_REFS.get('servers'):
@@ -242,6 +246,7 @@ async def load_dashboard_stats():
     global CURRENT_VIEW_STATE
     CURRENT_VIEW_STATE['scope'] = 'DASHBOARD'
     CURRENT_VIEW_STATE['data'] = None
+    logger.info(f"[Dashboard] load_dashboard_stats start | servers_cache={len(SERVERS_CACHE)} refs_before={list(DASHBOARD_REFS.keys())}")
 
     await asyncio.sleep(0.1)
 
@@ -251,6 +256,7 @@ async def load_dashboard_stats():
     content_container.classes(remove='justify-center items-center overflow-hidden p-6', add='overflow-y-auto p-4 pl-6 justify-start')
 
     init_data = calculate_dashboard_data()
+    logger.info(f"[Dashboard] load_dashboard_stats init_data={init_data}")
     if not init_data:
         init_data = {
             "servers": "0/0", "nodes": "0", "traffic": "0 GB", "subs": "0",
@@ -329,6 +335,7 @@ async def load_dashboard_stats():
             create_stat_card('nodes', 'stat-nodes', '节点总数', 'Active Nodes', 'hub', 'bg-gradient-to-br from-purple-600 to-fuchsia-800', init_data['nodes'])
             create_stat_card('traffic', 'stat-traffic', '总流量消耗', 'Total Usage', 'bolt', 'bg-gradient-to-br from-emerald-600 to-teal-800', init_data['traffic'])
             create_stat_card('subs', 'stat-subs', '订阅配置', 'Subscriptions', 'rss_feed', 'bg-gradient-to-br from-orange-500 to-red-700', init_data['subs'])
+            logger.info(f"[Dashboard] stat refs assigned | refs_now={list(DASHBOARD_REFS.keys())}")
 
         with ui.row().classes('w-full gap-6 mb-6 flex-wrap xl:flex-nowrap items-stretch'):
             chart_card_cls = 'w-full p-5 shadow-xl border border-slate-700 rounded-xl bg-[#1e293b] flex flex-col'

@@ -135,6 +135,26 @@ if cur.fetchone():
 # 3. 动态插入
 cur.execute("PRAGMA table_info(inbounds)")
 columns = [info[1] for info in cur.fetchall()]
+
+# 最小兼容修复：某些 x-ui / 3x-ui 数据库对 inbounds.tag 有唯一约束。
+# 原始实现固定写入空字符串，遇到已有空 tag 时会插入失败。
+# 这里仅在 SSH 直写数据库路径下，为空 tag 生成一个最小唯一值，避免 UNIQUE 冲突。
+if 'tag' in columns:
+    raw_tag = str(params.get('tag') or '').strip()
+    if not raw_tag:
+        proto = str(params.get('protocol') or 'inbound').strip() or 'inbound'
+        port = str(params.get('port') or '0').strip() or '0'
+        raw_tag = f"{{proto}}_{{port}}"
+    candidate_tag = raw_tag
+    suffix = 1
+    while True:
+        cur.execute("SELECT id FROM inbounds WHERE tag=?", (candidate_tag,))
+        if not cur.fetchone():
+            break
+        candidate_tag = f"{{raw_tag}}_{{suffix}}"
+        suffix += 1
+    params['tag'] = candidate_tag
+
 valid_keys = []
 valid_vals = []
 placeholders = []

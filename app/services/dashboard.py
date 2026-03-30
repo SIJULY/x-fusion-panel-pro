@@ -1,5 +1,6 @@
 import json
 
+from app.core.logging import logger
 from app.core.state import NODES_DATA, PROBE_DATA_CACHE, SERVERS_CACHE, SUBS_CACHE
 from app.utils.geo import detect_country_group, get_coords_from_name, get_flag_for_country
 
@@ -199,6 +200,7 @@ def calculate_dashboard_data():
     """
     try:
         total_servers = len(SERVERS_CACHE)
+        logger.info(f"[DashboardCalc] start | total_servers={total_servers} nodes_cache_keys={len(NODES_DATA)} probe_cache_keys={len(PROBE_DATA_CACHE)} subs={len(SUBS_CACHE)}")
         online_servers = 0
         total_nodes = 0
         total_traffic_bytes = 0
@@ -281,7 +283,7 @@ def calculate_dashboard_data():
         if not chart_data:
             chart_data = [{'name': '暂无数据', 'value': 0}]
 
-        return {
+        result = {
             "servers": f"{online_servers}/{total_servers}",
             "nodes": str(total_nodes),
             "traffic": f"{total_traffic_bytes / (1024**3):.2f} GB",
@@ -289,6 +291,8 @@ def calculate_dashboard_data():
             "bar_chart": {"names": bar_names, "values": bar_values},
             "pie_chart": chart_data
         }
+        logger.info(f"[DashboardCalc] result={result}")
+        return result
     except Exception as e:
         print(f"Error calculating dashboard data: {e}")
         import traceback

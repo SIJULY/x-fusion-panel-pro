@@ -1,9 +1,0 @@
-{
-    "probe_enabled": true,
-    "probe_token": "5d464762cbc3470cad5732664f9b83c1",
-    "sync_job_start": 1774797880.482809,
-    "sync_job_index": 0,
-    "mfa_secret": "HYYDZUWNWE6XWOPLZ3WBATXKERDPMVSG",
-    "session_version": "a8eef6e3",
-    "manager_base_url": "http://127.0.0.1:8080"
-}

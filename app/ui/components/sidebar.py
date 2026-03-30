@@ -2,6 +2,8 @@ import asyncio
 
 from nicegui import app, ui
 
+from app.core.logging import logger
+
 from app.core.state import (
     ADMIN_CONFIG,
     CURRENT_VIEW_STATE,
@@ -28,6 +30,7 @@ _current_dragged_group = None
 
 
 async def on_server_click_handler(server):
+    logger.info(f"[SidebarClick] on_server_click_handler called | server_url={server.get('url')} server_name={server.get('name')} current_view_before={CURRENT_VIEW_STATE}")
     current_scope = CURRENT_VIEW_STATE.get('scope')
     current_data = CURRENT_VIEW_STATE.get('data')
 
@@ -49,6 +52,7 @@ async def on_server_click_handler(server):
     from app.ui.pages.content_router import refresh_content
 
     await refresh_content('SINGLE', server)
+    logger.info(f"[SidebarClick] on_server_click_handler done | server_url={server.get('url')} current_view_after={CURRENT_VIEW_STATE}")
 
 
 def render_single_sidebar_row(s):
@@ -56,13 +60,16 @@ def render_single_sidebar_row(s):
     btn_name_cls = f'{btn_keycap_base} flex-grow text-xs font-bold text-slate-400 truncate px-3 py-2.5 hover:bg-[#334155] hover:text-white hover:border-slate-500'
     btn_settings_cls = f'{btn_keycap_base} w-10 py-2.5 px-0 flex items-center justify-center text-slate-500 hover:text-white hover:bg-[#334155] hover:border-slate-500'
 
+    async def open_server_settings():
+        await _open_server_dialog_by_server(s, ui.context.client)
+
     with ui.row().classes('w-full gap-2 no-wrap items-stretch') as row:
         ui.button(on_click=lambda _, s=s: on_server_click_handler(s)) \
             .bind_text_from(s, 'name') \
             .props('no-caps align=left flat text-color=grey-4') \
             .classes(btn_name_cls)
 
-        ui.button(icon='settings', on_click=lambda _, s=s: _open_server_dialog_by_server(s)) \
+        ui.button(icon='settings', on_click=open_server_settings) \
             .props('flat square size=sm text-color=grey-5') \
             .classes(btn_settings_cls).tooltip('配置 / 删除')
 
@@ -73,6 +80,8 @@ def render_single_sidebar_row(s):
 @ui.refreshable
 def render_sidebar_content():
     global _current_dragged_group
+
+    logger.info(f"[Sidebar] render_sidebar_content called | servers={len(SERVERS_CACHE)} before_clear_groups={len(SIDEBAR_UI_REFS.get('groups', {}))} before_clear_rows={len(SIDEBAR_UI_REFS.get('rows', {}))}")
 
     SIDEBAR_UI_REFS['groups'].clear()
     SIDEBAR_UI_REFS['rows'].clear()
@@ -96,14 +105,26 @@ def render_sidebar_content():
             ui.button('探针设置', icon='tune', on_click=lambda: asyncio.create_task(_render_probe())).props('flat align=left').classes(btn_top_style)
             ui.button('订阅管理', icon='rss_feed', on_click=lambda: asyncio.create_task(_load_subs())).props('flat align=left').classes(btn_top_style)
 
+    async def open_new_server_dialog():
+        await _open_server_dialog(None, ui.context.client)
+
+    async def open_all_servers(_=None):
+        await _refresh_scope('ALL', client=ui.context.client)
+
+    async def open_tag_group(tag_name):
+        await _refresh_scope('TAG', tag_name, client=ui.context.client)
+
+    async def open_country_group(group_name):
+        await _refresh_scope('COUNTRY', group_name, client=ui.context.client)
+
     with ui.column().props('id=sidebar-scroll-box').classes('w-full flex-grow overflow-y-auto p-2 gap-2 bg-[#1e293b]'):
         with ui.row().classes('w-full gap-2 px-1 mb-2'):
             func_btn_base = 'flex-grow text-xs font-bold text-white rounded-lg border-b-4 border-black/20 active:border-b-0 active:translate-y-[4px] transition-all'
             ui.button('新建分组', icon='create_new_folder', on_click=open_quick_group_create_dialog).props('dense unelevated').classes(f'bg-blue-600 hover:bg-blue-500 {func_btn_base}')
-            ui.button('添加服务器', icon='add', color='green', on_click=lambda: _open_server_dialog(None)).props('dense unelevated').classes(f'bg-emerald-600 hover:bg-emerald-500 {func_btn_base}')
+            ui.button('添加服务器', icon='add', color='green', on_click=open_new_server_dialog).props('dense unelevated').classes(f'bg-emerald-600 hover:bg-emerald-500 {func_btn_base}')
 
         list_item_3d = 'w-full items-center justify-between p-3 border border-slate-700 rounded-xl mb-1 bg-[#0f172a] shadow-md cursor-pointer group transition-all duration-200 hover:border-blue-500 hover:bg-[#172033] active:scale-[0.98]'
-        with ui.row().classes(list_item_3d).on('click', lambda _: asyncio.create_task(_refresh_scope('ALL'))):
+        with ui.row().classes(list_item_3d).on('click', open_all_servers):
             with ui.row().classes('items-center gap-3'):
                 with ui.column().classes('p-1.5 bg-slate-800 rounded-lg group-hover:bg-blue-900 transition-colors'):
                     ui.icon('dns', color='blue-4').classes('text-sm')
@@ -147,7 +168,7 @@ def render_sidebar_content():
                 with ui.element('div').classes('w-full').on('dragover.prevent', lambda _: None).on('drop', lambda e, n=tag_group: on_tag_drop(e, n)):
                     with ui.expansion('', icon=None, value=is_open).classes('w-full border border-slate-700 rounded-xl mb-2 bg-[#0f172a] shadow-sm transition-all').props('expand-icon-toggle header-class="bg-[#0f172a] hover:bg-[#172033]"').on_value_change(lambda e, g=tag_group: EXPANDED_GROUPS.add(g) if e.value else EXPANDED_GROUPS.discard(g)) as exp:
                         with exp.add_slot('header'):
-                            with ui.row().classes('w-full h-full items-center justify-between no-wrap py-2 cursor-pointer group/header transition-all').on('click', lambda _, g=tag_group: asyncio.create_task(_refresh_scope('TAG', g))):
+                            with ui.row().classes('w-full h-full items-center justify-between no-wrap py-2 cursor-pointer group/header transition-all').on('click', lambda _, g=tag_group: open_tag_group(g)):
                                 with ui.row().classes('items-center gap-3 flex-grow overflow-hidden no-wrap'):
                                     ui.icon('drag_indicator').props('draggable="true"').classes('cursor-move text-slate-600 hover:text-slate-400 p-1 rounded transition-colors group-hover/header:text-slate-400').on('dragstart', lambda e, n=tag_group: on_drag_start(e, n)).on('click.stop').tooltip('按住拖拽')
 
@@ -210,7 +231,7 @@ def render_sidebar_content():
                 with ui.element('div').classes('w-full').on('dragover.prevent', lambda _: None).on('drop', lambda e, n=c_name: on_region_drop(e, n)):
                     with ui.expansion('', icon=None, value=is_open).classes('w-full border border-slate-700 rounded-xl bg-[#0f172a] shadow-sm').props('expand-icon-toggle header-class="bg-[#0f172a] hover:bg-[#172033]"').on_value_change(lambda e, g=c_name: EXPANDED_GROUPS.add(g) if e.value else EXPANDED_GROUPS.discard(g)) as exp:
                         with exp.add_slot('header'):
-                            with ui.row().classes('w-full h-full items-center justify-between no-wrap py-2 cursor-pointer group/header transition-all').on('click', lambda _, g=c_name: asyncio.create_task(_refresh_scope('COUNTRY', g))):
+                            with ui.row().classes('w-full h-full items-center justify-between no-wrap py-2 cursor-pointer group/header transition-all').on('click', lambda _, g=c_name: open_country_group(g)):
                                 with ui.row().classes('items-center gap-3 flex-grow overflow-hidden'):
                                     ui.icon('drag_indicator').props('draggable="true"').classes('cursor-move text-slate-600 hover:text-slate-400 p-1').on('dragstart', lambda e, n=c_name: on_drag_start(e, n)).on('click.stop').tooltip('按住拖拽')
                                     with ui.row().classes('items-center gap-2 flex-grow'):
@@ -236,6 +257,8 @@ def render_sidebar_content():
             }
         })();
     ''')
+
+    logger.info(f"[Sidebar] render_sidebar_content finished | servers={len(SERVERS_CACHE)} groups={len(SIDEBAR_UI_REFS.get('groups', {}))} rows={len(SIDEBAR_UI_REFS.get('rows', {}))}")
 
     with ui.column().classes('w-full p-2 border-t border-slate-700 mt-auto mb-4 gap-2 bg-[#1e293b] z-10'):
         bottom_btn_3d = 'w-full text-slate-400 text-xs font-bold bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 transition-all hover:bg-[#334155] hover:text-white hover:border-blue-500 active:translate-y-[1px]'
@@ -263,19 +286,31 @@ async def _load_subs():
     await load_subs_view()
 
 
-async def _refresh_scope(scope, data=None):
+async def _refresh_scope(scope, data=None, client=None):
     from app.ui.pages.content_router import refresh_content
 
-    await refresh_content(scope, data)
+    logger.info(f"[SidebarClick] _refresh_scope called | scope={scope} data={data} client_present={client is not None} current_view_before={CURRENT_VIEW_STATE}")
+    await refresh_content(scope, data, manual_client=client)
+    logger.info(f"[SidebarClick] _refresh_scope done | scope={scope} data={data} client_present={client is not None} current_view_after={CURRENT_VIEW_STATE}")
 
 
-def _open_server_dialog(index):
+async def _open_server_dialog(index, client=None):
     from app.ui.dialogs.server_dialog import open_server_dialog
 
-    open_server_dialog(index)
+    if client:
+        with client:
+            await open_server_dialog(index)
+        return
+
+    await open_server_dialog(index)
 
 
-def _open_server_dialog_by_server(server):
+async def _open_server_dialog_by_server(server, client=None):
     from app.ui.dialogs.server_dialog import open_server_dialog
 
-    open_server_dialog(SERVERS_CACHE.index(server))
+    if client:
+        with client:
+            await open_server_dialog(SERVERS_CACHE.index(server))
+        return
+
+    await open_server_dialog(SERVERS_CACHE.index(server))

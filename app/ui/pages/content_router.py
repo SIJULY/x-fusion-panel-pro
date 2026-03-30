@@ -3,6 +3,8 @@ import time
 
 from nicegui import ui
 
+from app.core.logging import logger
+
 from app.core.config import PAGE_SIZE, SYNC_COOLDOWN
 from app.core.state import CURRENT_VIEW_STATE, LAST_SYNC_MAP, REFRESH_LOCKS, SERVERS_CACHE
 from app.services.xui_fetch import fetch_inbounds_safe
@@ -37,18 +39,20 @@ def get_targets_by_scope(scope, data):
 
 
 async def refresh_content(scope='ALL', data=None, force_refresh=False, sync_name_action=False, page_num=1, manual_client=None):
+    global CURRENT_VIEW_STATE, REFRESH_LOCKS, LAST_SYNC_MAP
+
     client = manual_client
     if not client:
         try:
             client = ui.context.client
         except:
             pass
+    logger.info(f"[ContentRouter] refresh_content called | scope={scope} data={data} force_refresh={force_refresh} page_num={page_num} client_present={client is not None} container_present={content_container is not None} current_view_before={CURRENT_VIEW_STATE}")
     if not client:
+        logger.info("[ContentRouter] refresh_content abort | no client")
         return
 
     with client:
-        global CURRENT_VIEW_STATE, REFRESH_LOCKS, LAST_SYNC_MAP
-
         cache_key = f"{scope}::{data}::P{page_num}"
         lock_key = cache_key
 
@@ -56,6 +60,7 @@ async def refresh_content(scope='ALL', data=None, force_refresh=False, sync_name
         last_sync = LAST_SYNC_MAP.get(cache_key, 0)
 
         targets = get_targets_by_scope(scope, data)
+        logger.info(f"[ContentRouter] refresh_content targets_resolved | scope={scope} data={data} targets={len(targets)}")
         start_idx = (page_num - 1) * PAGE_SIZE
         end_idx = start_idx + PAGE_SIZE
         current_page_servers = targets[start_idx:end_idx] if targets else []
@@ -67,6 +72,7 @@ async def refresh_content(scope='ALL', data=None, force_refresh=False, sync_name
 
         if not force_refresh and ((now - last_sync < SYNC_COOLDOWN) or is_all_probe):
             CURRENT_VIEW_STATE.update({'scope': scope, 'data': data, 'page': page_num, 'render_token': now})
+            logger.info(f"[ContentRouter] refresh_content using cached/probe path | current_view={CURRENT_VIEW_STATE}")
             await _render_ui_internal(scope, data, page_num, force_refresh, sync_name_action, client)
 
             if is_all_probe:
@@ -77,11 +83,14 @@ async def refresh_content(scope='ALL', data=None, force_refresh=False, sync_name
             return
 
         if lock_key in REFRESH_LOCKS:
+            logger.info(f"[ContentRouter] refresh_content abort | lock_key active={lock_key}")
             return
 
         CURRENT_VIEW_STATE.update({'scope': scope, 'data': data, 'page': page_num, 'render_token': now})
+        logger.info(f"[ContentRouter] refresh_content state updated | current_view={CURRENT_VIEW_STATE}")
 
         await _render_ui_internal(scope, data, page_num, force_refresh, sync_name_action, client)
+        logger.info(f"[ContentRouter] refresh_content initial render done | scope={scope} data={data} current_view_after={CURRENT_VIEW_STATE}")
 
         if not current_page_servers:
             return
@@ -119,18 +128,22 @@ async def refresh_content(scope='ALL', data=None, force_refresh=False, sync_name
 
 
 async def _render_ui_internal(scope, data, page_num, force_refresh, sync_name_action, client):
+    logger.info(f"[ContentRouter] _render_ui_internal called | scope={scope} data={data} page_num={page_num} container_present={content_container is not None} container_id={id(content_container) if content_container else None}")
     if content_container:
         content_container.clear()
         content_container.classes(remove='justify-center items-center overflow-hidden p-6', add='overflow-y-auto p-4 pl-6 justify-start')
         with content_container:
             targets = get_targets_by_scope(scope, data)
+            logger.info(f"[ContentRouter] _render_ui_internal targets | scope={scope} data={data} targets={len(targets)}")
             if scope == 'SINGLE':
                 if targets:
                     from app.ui.dialogs.server_dialog import render_single_server_view
 
+                    logger.info(f"[ContentRouter] _render_ui_internal branch=SINGLE found target | url={targets[0].get('url')}")
                     await render_single_server_view(targets[0])
                     return
                 else:
+                    logger.info("[ContentRouter] _render_ui_internal branch=SINGLE target missing")
                     ui.label('服务器未找到')
                     return
 
@@ -147,6 +160,7 @@ async def _render_ui_internal(scope, data, page_num, force_refresh, sync_name_ac
                 is_group_view = True
                 show_ping = True
 
+            logger.info(f"[ContentRouter] _render_ui_internal branch={scope} title={title}")
             with ui.row().classes('items-center w-full mb-4 border-b pb-2 justify-between'):
                 with ui.row().classes('items-center gap-4'):
                     ui.label(title).classes('text-2xl font-bold')
@@ -160,6 +174,7 @@ async def _render_ui_internal(scope, data, page_num, force_refresh, sync_name_ac
                         ui.button('同步当前页', icon='sync', on_click=lambda: refresh_content(scope, data, force_refresh=True, sync_name_action=True, page_num=page_num, manual_client=client)).props('outline color=primary')
 
             if not targets:
+                logger.info(f"[ContentRouter] _render_ui_internal empty list | scope={scope} data={data}")
                 with ui.column().classes('w-full h-64 justify-center items-center text-gray-400'):
                     ui.icon('inbox', size='4rem')
                     ui.label('列表为空')
@@ -170,4 +185,7 @@ async def _render_ui_internal(scope, data, page_num, force_refresh, sync_name_ac
                     pass
                 from app.ui.dialogs.server_dialog import render_aggregated_view
 
+                logger.info(f"[ContentRouter] _render_ui_internal render_aggregated_view | scope={scope} data={data} targets={len(targets)} show_ping={show_ping}")
                 await render_aggregated_view(targets, show_ping=show_ping, token=None, initial_page=page_num)
+    else:
+        logger.info("[ContentRouter] _render_ui_internal abort | content_container missing")
