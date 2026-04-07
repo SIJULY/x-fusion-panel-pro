@@ -1,12 +1,16 @@
 #!/bin/bash
 
 # ==============================================================================
-# X-Fusion Panel Pro 最终适配版 (全仓库同步模式)
+# X-Fusion Panel Pro 终极正式版 (全量同步 + 域名HTTPS + ARM 适配)
 # ==============================================================================
 
 PROJECT_NAME="x-fusion-panel-pro"
 INSTALL_DIR="/root/${PROJECT_NAME}"
 GIT_REPO_URL="https://github.com/SIJULY/x-fusion-panel-pro.git"
+
+# Caddy 配置标记
+CADDY_MARK_START="# X-Fusion Panel Config Start"
+CADDY_MARK_END="# X-Fusion Panel Config End"
 
 RED="\033[31m"
 GREEN="\033[32m"
@@ -30,14 +34,11 @@ check_docker() {
     fi
 }
 
-# --- 📥 改用 git clone 确保目录结构完整 ---
 sync_source_code() {
     if ! command -v git &> /dev/null; then
-        print_info "安装 Git..."
         apt-get update && apt-get install -y git
     fi
-    
-    print_info "正在同步完整仓库源码..."
+    print_info "正在同步源码仓库..."
     if [ -d "${INSTALL_DIR}/.git" ]; then
         cd "${INSTALL_DIR}" && git reset --hard HEAD && git pull
     else
@@ -52,6 +53,7 @@ generate_compose() {
     local USER=$3
     local PASS=$4
     local SECRET=$5
+    local ENABLE_CADDY=$6
 
     cat > ${INSTALL_DIR}/docker-compose.yml << EOF
 services:
@@ -76,10 +78,50 @@ services:
     image: tindy2013/subconverter:latest
     container_name: subconverter
     restart: always
-    ports:
-      - "127.0.0.1:25500:25500"
+    expose:
+      - "25500"
     environment:
       - TZ=Asia/Shanghai
+EOF
+
+    if [ "$ENABLE_CADDY" == "true" ]; then
+        cat >> ${INSTALL_DIR}/docker-compose.yml << EOF
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+    depends_on:
+      - x-fusion-panel
+EOF
+    fi
+}
+
+configure_caddy() {
+    local DOMAIN=$1
+    local DOCKER_CADDY_FILE="${INSTALL_DIR}/Caddyfile"
+    # 清理旧配置
+    [ -f "$DOCKER_CADDY_FILE" ] && sed -i "/${CADDY_MARK_START}/,/${CADDY_MARK_END}/d" "$DOCKER_CADDY_FILE"
+    
+    cat >> "$DOCKER_CADDY_FILE" << EOF
+${CADDY_MARK_START}
+${DOMAIN} {
+    encode gzip
+    handle_path /convert* {
+        rewrite * /sub
+        reverse_proxy subconverter:25500 
+    }
+    handle {
+        reverse_proxy x-fusion-panel:8080
+    }
+}
+${CADDY_MARK_END}
 EOF
 }
 
@@ -87,31 +129,55 @@ install_panel() {
     [ "$(id -u)" -ne 0 ] && print_error "请用 root 运行"
     check_docker
     sync_source_code
-    
+    mkdir -p ${INSTALL_DIR}/data
+
+    # 账号配置
+    echo -e "${YELLOW}--- 基础配置 ---${PLAIN}"
     read -p "设置账号 [admin]: " admin_user
     admin_user=${admin_user:-admin}
     read -p "设置密码 [admin]: " admin_pass
     admin_pass=${admin_pass:-admin}
-    secret_key=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
-    read -p "访问端口 [8081]: " port
-    port=${port:-8081}
+    def_key=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+    read -p "设置密钥 (回车随机): " secret_key
+    secret_key=${secret_key:-$def_key}
 
-    generate_compose "0.0.0.0" "$port" "$admin_user" "$admin_pass" "$secret_key"
+    # 访问方式配置
+    echo -e "\n${YELLOW}--- 访问方式 ---${PLAIN}"
+    echo "1) IP + 端口 (直接访问)"
+    echo "2) 域名 + 自动 HTTPS (Caddy)"
+    read -p "请选择 [1]: " net_choice
+    net_choice=${net_choice:-1}
 
-    print_info "开始本地镜像构建 (请稍后)..."
+    if [ "$net_choice" == "2" ]; then
+        read -p "请输入域名: " domain
+        [ -z "$domain" ] && print_error "域名不能为空"
+        configure_caddy "$domain"
+        generate_compose "127.0.0.1" "8081" "$admin_user" "$admin_pass" "$secret_key" "true"
+        ACCESS_URL="https://${domain}"
+    else
+        read -p "开放端口 [8081]: " port
+        port=${port:-8081}
+        generate_compose "0.0.0.0" "$port" "$admin_user" "$admin_pass" "$secret_key" "false"
+        IP=$(curl -s ifconfig.me)
+        ACCESS_URL="http://${IP}:${port}"
+    fi
+
+    print_info "开始构建镜像并启动服务..."
     cd ${INSTALL_DIR}
     docker compose up -d --build
 
-    local ip_addr=$(curl -s ifconfig.me)
-    print_success "安装完成！访问地址: http://${ip_addr}:${port}"
+    print_success "X-Fusion Panel Pro 安装完成！"
+    echo -e "访问地址: ${GREEN}${ACCESS_URL}${PLAIN}"
+    echo -e "初始账号: ${admin_user}"
+    echo -e "初始密码: ${admin_pass}"
 }
 
-# --- 主界面 ---
+# --- 菜单逻辑 ---
 clear
 echo "========================================="
-echo "    X-Fusion Panel Pro 一键管理脚本      "
+echo -e "${BLUE}    X-Fusion Panel Pro 管理脚本 ${PLAIN}"
 echo "========================================="
-echo "  1. 安装/更新 Pro 版"
+echo "  1. 安装/更新面板"
 echo "  2. 卸载面板"
 echo "  0. 退出"
 read -p "选择: " choice
@@ -124,4 +190,5 @@ case $choice in
         print_success "已卸载"
         ;;
     0) exit 0 ;;
+    *) print_error "无效选项" ;;
 esac
