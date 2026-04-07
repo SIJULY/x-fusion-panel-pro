@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: sijuly0713/x-fusion-panel-pro:latest
+    image: x-fusion-panel-local:latest  # 本地构建时，镜像名建议加后缀区分
     container_name: x-fusion-panel
     restart: always
     ports:
@@ -18,9 +18,9 @@ services:
       - XUI_PASSWORD=${XUI_PASSWORD:-admin}
       - XUI_SECRET_KEY=${XUI_SECRET_KEY:-sijuly_secret_key}
 
-  # ⚠️ ARM 兼容版 subconverter（推荐方案）
   subconverter:
-    image: ghcr.io/metacubex/subconverter:latest
+    # 关键：必须换成支持 ARM64 的镜像，否则在 ARM VPS 上依然启动失败
+    image: asdlokj123/subconverter:latest 
     container_name: subconverter
     restart: always
     expose:
