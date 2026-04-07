@@ -176,7 +176,11 @@ echo "2. 更新"
 echo "3. 卸载"
 echo "0. 退出"
 
-read -p "选择: " c
+if [ -t 0 ]; then
+    read -p "选择: " c
+else
+    c=1
+fi
 
 case $c in
 1) install_panel ;;
