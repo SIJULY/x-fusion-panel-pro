@@ -11,7 +11,7 @@ from app.core.state import ADMIN_CONFIG, NODES_DATA, SERVERS_CACHE, SUBS_CACHE
 from app.utils.encoding import decode_base64_safe, generate_detail_config, generate_node_link, safe_base64
 
 
-async def sub_handler(token: str, request: Request):
+async def sub_handler(token: str):
     sub = next((s for s in SUBS_CACHE if s['token'] == token), None)
     if not sub:
         return Response("Invalid Token", 404)
@@ -56,7 +56,7 @@ async def sub_handler(token: str, request: Request):
     return Response(safe_base64("\n".join(links)), media_type="text/plain; charset=utf-8")
 
 
-async def group_sub_handler(group_b64: str, request: Request):
+async def group_sub_handler(group_b64: str):
     group_name = decode_base64_safe(group_b64)
     if not group_name:
         return Response("Invalid Group Name", 400)
@@ -144,7 +144,7 @@ async def short_group_handler(target: str, group_b64: str, request: Request):
         if custom_base:
             base_url = custom_base
         else:
-            host = request.headers.get('host')
+            host = request.headers.get('host', 'localhost')
             scheme = request.url.scheme
             base_url = f"{scheme}://{host}"
 
@@ -218,7 +218,7 @@ async def short_sub_handler(target: str, token: str, request: Request):
         if custom_base:
             base_url = custom_base
         else:
-            host = request.headers.get('host')
+            host = request.headers.get('host', 'localhost')
             scheme = request.url.scheme
             base_url = f"{scheme}://{host}"
 
