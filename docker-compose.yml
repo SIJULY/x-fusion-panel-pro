@@ -2,8 +2,10 @@ version: '3.8'
 
 services:
   x-fusion-panel:
-    build: .
-    image: x-fusion-panel:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sijuly0713/x-fusion-panel-pro:latest
     container_name: x-fusion-panel
     restart: always
     ports:
@@ -16,8 +18,9 @@ services:
       - XUI_PASSWORD=${XUI_PASSWORD:-admin}
       - XUI_SECRET_KEY=${XUI_SECRET_KEY:-sijuly_secret_key}
 
+  # ⚠️ ARM 兼容版 subconverter（推荐方案）
   subconverter:
-    image: tindy2013/subconverter:latest
+    image: ghcr.io/metacubex/subconverter:latest
     container_name: subconverter
     restart: always
     expose:
