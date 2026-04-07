@@ -7,7 +7,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 STATIC_DIR = PROJECT_ROOT / 'static'
 
-from fastapi import Request
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from nicegui import app, ui
 
 
@@ -34,38 +37,38 @@ from app.storage.bootstrap import init_data
 register_static_files()
 
 
-@app.post('/api/probe/push')
+@app.post("/api/probe/push")
 async def api_probe_push(request: Request):
     return await probe_push_data(request)
 
 
 @app.post('/api/probe/register')
-async def api_probe_register(request):
+async def api_probe_register(request: Request):
     return await probe_register(request)
 
 
 @app.post('/api/auto_register_node')
-async def api_auto_register_node(request):
+async def api_auto_register_node(request: Request):
     return await auto_register_node(request)
 
 
 @app.get('/sub/{token}')
-async def api_sub_handler(token: str, request):
-    return await sub_handler(token, request)
+async def api_sub_handler(token: str):
+    return await sub_handler(token)
 
 
 @app.get('/sub/group/{group_b64}')
-async def api_group_sub_handler(group_b64: str, request):
-    return await group_sub_handler(group_b64, request)
+async def api_group_sub_handler(group_b64: str):
+    return await group_sub_handler(group_b64)
 
 
 @app.get('/get/sub/{target}/{token}')
-async def api_short_sub_handler(target: str, token: str, request):
+async def api_short_sub_handler(target: str, token: str, request: Request):
     return await short_sub_handler(target, token, request)
 
 
 @app.get('/get/group/{target}/{group_b64}')
-async def api_short_group_handler(target: str, group_b64: str, request):
+async def api_short_group_handler(target: str, group_b64: str, request: Request):
     return await short_group_handler(target, group_b64, request)
 
 
@@ -96,5 +99,3 @@ if __name__ in {'__main__', '__mp_main__'}:
         reconnect_timeout=600.0,
         ws_ping_interval=20,
         ws_ping_timeout=20,
-        timeout_keep_alive=60,
-    )
