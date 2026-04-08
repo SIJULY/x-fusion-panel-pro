@@ -99,3 +99,5 @@ if __name__ in {'__main__', '__mp_main__'}:
         reconnect_timeout=600.0,
         ws_ping_interval=20,
         ws_ping_timeout=20,
+        timeout_keep_alive=60,
+    )
