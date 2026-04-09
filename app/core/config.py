@@ -77,7 +77,7 @@ AUTO_COUNTRY_MAP = {
     # --- 欧洲地区 ---
     '🇬🇧': '🇬🇧 英国', 'UK': '🇬🇧 英国', 'GB': '🇬🇧 英国', 'United Kingdom': '🇬🇧 英国', 'Great Britain': '🇬🇧 英国', 'England': '🇬🇧 英国', '英国': '🇬🇧 英国', 'London': '🇬🇧 英国',
     '🇩🇪': '🇩🇪 德国', 'DE': '🇩🇪 德国', 'Germany': '🇩🇪 德国', '德国': '🇩🇪 德国', 'Frankfurt': '🇩🇪 德国',
-    '🇫🇷': '🇫🇷 法国', 'FR': '🇫🇷 法国', 'France': '🇫🇷 法国', '法国': '🇫🇷 法国', 'Paris': '🇫🇷 法国',
+    '🇫🇷': '🇫🇷 法国', 'FR': '🇫🇷 法国', 'France': '🇫🇷 法国', '法国': '🇫🇷 法国', 'Paris': '🇫🇷 法国', '巴黎': '🇫🇷 法国',
     '🇳🇱': '🇳🇱 荷兰', 'NL': '🇳🇱 荷兰', 'Netherlands': '🇳🇱 荷兰', 'The Netherlands': '🇳🇱 荷兰', '荷兰': '🇳🇱 荷兰', 'Amsterdam': '🇳🇱 荷兰',
     '🇷🇺': '🇷🇺 俄罗斯', 'RU': '🇷🇺 俄罗斯', 'Russia': '🇷🇺 俄罗斯', 'Russian Federation': '🇷🇺 俄罗斯', '俄罗斯': '🇷🇺 俄罗斯', 'Moscow': '🇷🇺 俄罗斯',
     '🇮🇹': '🇮🇹 意大利', 'IT': '🇮🇹 意大利', 'Italy': '🇮🇹 意大利', '意大利': '🇮🇹 意大利', 'Milan': '🇮🇹 意大利',
@@ -152,7 +152,7 @@ MATCH_MAP = {
     '🇲🇽': 'Mexico', 'MEXICO': 'Mexico', 'MEX': 'Mexico',
     '🇬🇧': 'United Kingdom', 'UK': 'United Kingdom', 'GB': 'United Kingdom', 'UNITED KINGDOM': 'United Kingdom', 'LONDON': 'United Kingdom',
     '🇩🇪': 'Germany', 'GERMANY': 'Germany', 'DEU': 'Germany', 'FRANKFURT': 'Germany',
-    '🇫🇷': 'France', 'FRANCE': 'France', 'FRA': 'France', 'PARIS': 'France',
+    '🇫🇷': 'France', 'FRANCE': 'France', 'FRA': 'France', 'PARIS': 'France', '法国': 'France', '巴黎': 'France',
     '🇳🇱': 'Netherlands', 'NETHERLANDS': 'Netherlands', 'NLD': 'Netherlands', 'AMSTERDAM': 'Netherlands',
     '🇷🇺': 'Russia', 'RUSSIA': 'Russia', 'RUS': 'Russia',
     '🇮🇹': 'Italy', 'ITALY': 'Italy', 'ITA': 'Italy', 'MILAN': 'Italy',
