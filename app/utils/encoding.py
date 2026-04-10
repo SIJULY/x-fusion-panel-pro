@@ -3,6 +3,185 @@ import json
 from urllib.parse import quote
 
 
+def _load_json_object(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except:
+            return {}
+    return {}
+
+
+def _get_settings(node):
+    return _load_json_object(node.get('settings'))
+
+
+def _get_stream_settings(node):
+    return _load_json_object(node.get('streamSettings') or node.get('stream_settings'))
+
+
+def _clean_server_host(server_host):
+    clean_host = str(server_host or '').replace('http://', '').replace('https://', '')
+    if ':' in clean_host and not clean_host.startswith('['):
+        clean_host = clean_host.split(':')[0]
+    return clean_host
+
+
+def _url_quote(value):
+    return quote(str(value or ''), safe='')
+
+
+def _stringify_vmess_port(port):
+    try:
+        return str(int(port))
+    except:
+        return str(port)
+
+
+def _build_vmess_link(node, address):
+    settings = _get_settings(node)
+    stream = _get_stream_settings(node)
+    clients = settings.get('clients') or [{}]
+    client = clients[0] if clients else {}
+    remark = node.get('remark', 'Unnamed')
+    port = node.get('port', '')
+    net = stream.get('network', 'tcp')
+    security = stream.get('security', 'none')
+
+    host = ''
+    path = ''
+    if net == 'ws':
+        ws_settings = stream.get('wsSettings', {})
+        host = ws_settings.get('headers', {}).get('Host', '')
+        path = ws_settings.get('path', '/')
+    elif net == 'grpc':
+        path = stream.get('grpcSettings', {}).get('serviceName', '')
+    elif net == 'httpupgrade':
+        httpupgrade_settings = stream.get('httpupgradeSettings', {})
+        host = httpupgrade_settings.get('host', '')
+        path = httpupgrade_settings.get('path', '/')
+    elif net == 'xhttp':
+        xhttp_settings = stream.get('xhttpSettings', {})
+        host = xhttp_settings.get('host', '')
+        path = xhttp_settings.get('path', '')
+
+    tls_value = security if security in ['tls', 'reality'] else 'none'
+
+    vmess_payload = {
+        'v': '2',
+        'ps': remark,
+        'add': address,
+        'port': _stringify_vmess_port(port),
+        'id': client.get('id', ''),
+        'aid': str(client.get('alterId', 0)),
+        'scy': client.get('security', 'auto') or 'auto',
+        'net': net,
+        'type': 'none',
+        'host': host,
+        'path': path,
+        'tls': tls_value,
+    }
+
+    server_name = stream.get('tlsSettings', {}).get('serverName', '')
+    if server_name:
+        vmess_payload['sni'] = server_name
+
+    return 'vmess://' + safe_base64(json.dumps(vmess_payload, ensure_ascii=False))
+
+
+def _build_vless_link(node, address):
+    settings = _get_settings(node)
+    stream = _get_stream_settings(node)
+    clients = settings.get('clients') or [{}]
+    client = clients[0] if clients else {}
+    remark = node.get('remark', 'Unnamed')
+    port = node.get('port', '')
+    net = stream.get('network', 'tcp')
+    security = stream.get('security', 'none')
+
+    params = [
+        f'type={_url_quote(net)}',
+        f'security={_url_quote(security)}',
+    ]
+
+    if net == 'ws':
+        ws_settings = stream.get('wsSettings', {})
+        path = ws_settings.get('path', '/')
+        host = ws_settings.get('headers', {}).get('Host', '')
+        if path:
+            params.append(f'path={_url_quote(path)}')
+        if host:
+            params.append(f'host={_url_quote(host)}')
+    elif net == 'grpc':
+        service_name = stream.get('grpcSettings', {}).get('serviceName', '')
+        if service_name:
+            params.append(f'serviceName={_url_quote(service_name)}')
+    elif net == 'xhttp':
+        xhttp_settings = stream.get('xhttpSettings', {})
+        path = xhttp_settings.get('path', '')
+        host = xhttp_settings.get('host', '')
+        mode = xhttp_settings.get('mode', '')
+        if path:
+            params.append(f'path={_url_quote(path)}')
+        if host:
+            params.append(f'host={_url_quote(host)}')
+        if mode:
+            params.append(f'mode={_url_quote(mode)}')
+
+    tls_settings = stream.get('tlsSettings', {})
+    server_name = tls_settings.get('serverName', '')
+    if server_name:
+        params.append(f'sni={_url_quote(server_name)}')
+
+    reality_settings = stream.get('realitySettings', {})
+    if security == 'reality':
+        if reality_settings.get('serverName'):
+            params.append(f'sni={_url_quote(reality_settings.get("serverName"))}')
+        if reality_settings.get('publicKey'):
+            params.append(f'pbk={_url_quote(reality_settings.get("publicKey"))}')
+        short_id = reality_settings.get('shortId')
+        if isinstance(short_id, list):
+            short_id = short_id[0] if short_id else ''
+        if short_id:
+            params.append(f'sid={_url_quote(short_id)}')
+        flow = client.get('flow', '')
+        if flow:
+            params.append(f'flow={_url_quote(flow)}')
+
+    query = '&'.join(params)
+    return f"vless://{client.get('id', '')}@{address}:{port}?{query}#{_url_quote(remark)}"
+
+
+def _build_trojan_link(node, address):
+    settings = _get_settings(node)
+    stream = _get_stream_settings(node)
+    clients = settings.get('clients') or [{}]
+    client = clients[0] if clients else {}
+    remark = node.get('remark', 'Unnamed')
+    port = node.get('port', '')
+    net = stream.get('network', 'tcp')
+    security = stream.get('security', 'none')
+    params = [
+        f'type={_url_quote(net)}',
+        f'security={_url_quote(security)}',
+    ]
+    server_name = stream.get('tlsSettings', {}).get('serverName', '')
+    if server_name:
+        params.append(f'sni={_url_quote(server_name)}')
+    return f"trojan://{client.get('password', '')}@{address}:{port}?{'&'.join(params)}#{_url_quote(remark)}"
+
+
+def _build_shadowsocks_link(node, address):
+    settings = _get_settings(node)
+    remark = node.get('remark', 'Unnamed')
+    port = node.get('port', '')
+    cred = f"{settings.get('method', '')}:{settings.get('password', '')}"
+    return f"ss://{safe_base64(cred)}@{address}:{port}#{_url_quote(remark)}"
+
+
 def parse_vless_link_to_node(link, remark_override=None):
     """将 vless:// 链接解析为面板节点格式的字典"""
     try:
@@ -113,61 +292,17 @@ def generate_converted_link(raw_link, target, domain_prefix):
 
 def generate_node_link(node, server_host):
     try:
-        clean_host = server_host
-        if '://' in clean_host:
-            clean_host = clean_host.split('://')[-1]
-        if ':' in clean_host and not clean_host.startswith('['):
-            clean_host = clean_host.split(':')[0]
+        address = node.get('listen') or _clean_server_host(server_host)
+        protocol = node.get('protocol')
 
-        p = node['protocol']
-        remark = node['remark']
-        port = node['port']
-        add = node.get('listen') or clean_host
-
-        s = json.loads(node['settings']) if isinstance(node['settings'], str) else node['settings']
-        st = json.loads(node['streamSettings']) if isinstance(node['streamSettings'], str) else node['streamSettings']
-        net = st.get('network', 'tcp')
-        tls = st.get('security', 'none')
-        path = ""
-        host = ""
-
-        if net == 'ws':
-            path = st.get('wsSettings', {}).get('path', '/')
-            host = st.get('wsSettings', {}).get('headers', {}).get('Host', '')
-        elif net == 'grpc':
-            path = st.get('grpcSettings', {}).get('serviceName', '')
-
-        if p == 'vmess':
-            v = {
-                "v": "2",
-                "ps": remark,
-                "add": add,
-                "port": port,
-                "id": s['clients'][0]['id'],
-                "aid": "0",
-                "scy": "auto",
-                "net": net,
-                "type": "none",
-                "host": host,
-                "path": path,
-                "tls": tls,
-            }
-            return "vmess://" + safe_base64(json.dumps(v))
-
-        elif p == 'vless':
-            params = f"type={net}&security={tls}"
-            if path:
-                params += f"&path={path}" if net != 'grpc' else f"&serviceName={path}"
-            if host:
-                params += f"&host={host}"
-            return f"vless://{s['clients'][0]['id']}@{add}:{port}?{params}#{remark}"
-
-        elif p == 'trojan':
-            return f"trojan://{s['clients'][0]['password']}@{add}:{port}?type={net}&security={tls}#{remark}"
-
-        elif p == 'shadowsocks':
-            cred = f"{s['method']}:{s['password']}"
-            return f"ss://{safe_base64(cred)}@{add}:{port}#{remark}"
+        if protocol == 'vmess':
+            return _build_vmess_link(node, address)
+        if protocol == 'vless':
+            return _build_vless_link(node, address)
+        if protocol == 'trojan':
+            return _build_trojan_link(node, address)
+        if protocol == 'shadowsocks':
+            return _build_shadowsocks_link(node, address)
 
     except Exception:
         return ""
@@ -176,13 +311,10 @@ def generate_node_link(node, server_host):
 
 def generate_detail_config(node, server_host):
     try:
-        clean_host = server_host.replace('http://', '').replace('https://', '')
-        if ':' in clean_host and not clean_host.startswith('['):
-            clean_host = clean_host.split(':')[0]
-
+        clean_host = _clean_server_host(server_host)
         remark = node.get('remark', 'Unnamed').replace(',', '_').replace('=', '_').strip()
         address = node.get('listen') or clean_host
-        port = node['port']
+        port = node.get('port', '')
 
         if node.get('_is_custom'):
             raw_link = node.get('_raw_link', '')
@@ -224,15 +356,16 @@ def generate_detail_config(node, server_host):
             elif raw_link.startswith('vless://'):
                 return f"// Surge 暂未原生支持 XHTTP: {remark}"
 
-        protocol = node['protocol']
-        settings = json.loads(node['settings']) if isinstance(node['settings'], str) else node['settings']
-        stream = json.loads(node['streamSettings']) if isinstance(node['streamSettings'], str) else node['streamSettings']
+        protocol = node.get('protocol')
+        settings = _get_settings(node)
+        stream = _get_stream_settings(node)
         net = stream.get('network', 'tcp')
         security = stream.get('security', 'none')
         tls = (security == 'tls') or (security == 'reality')
 
         if protocol == 'vmess':
-            uuid = settings['clients'][0]['id']
+            clients = settings.get('clients') or [{}]
+            uuid = clients[0].get('id', '')
             line = f"{remark} = vmess, {address}, {port}, username={uuid}"
             if net == 'ws':
                 ws_set = stream.get('wsSettings', {})
@@ -258,7 +391,8 @@ def generate_detail_config(node, server_host):
             return line
 
         elif protocol == 'trojan':
-            password = settings['clients'][0]['password']
+            clients = settings.get('clients') or [{}]
+            password = clients[0].get('password', '')
             line = f"{remark} = trojan, {address}, {port}, password={password}"
             if tls:
                 line += ", tls=true"
