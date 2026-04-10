@@ -629,17 +629,17 @@ async def render_single_server_view(server_conf, force_refresh=False):
                             ui.label(text).classes(f'text-[10px] font-bold text-{color}-400')
                         with ui.row().classes('gap-2 justify-center w-full no-wrap opacity-60 group-hover:opacity-100 transition'):
                             btn_props = 'flat dense size=sm round'
-                            link = n.get('_raw_link', '') if is_custom else generate_node_link(n, server_conf['url'])
-                            if link:
-                                ui.button(icon='content_copy', on_click=lambda u=link: safe_copy_to_clipboard(u)).props(btn_props).tooltip('复制链接').classes('text-slate-400 hover:bg-slate-600 hover:text-blue-400')
+                            raw_link = n.get('_raw_link', '') or generate_node_link(n, server_conf['url'])
+                            if raw_link:
+                                ui.button(icon='link', on_click=lambda u=raw_link: safe_copy_to_clipboard(u)).props(btn_props).tooltip('复制原始链接').classes('text-slate-400 hover:bg-slate-600 hover:text-cyan-400')
 
                             async def copy_detail_action(node_item=n):
                                 host = server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
                                 text = generate_detail_config(node_item, host)
-                                if text:
+                                if text and not str(text).startswith('//'):
                                     await safe_copy_to_clipboard(text)
                                 else:
-                                    ui.notify('该协议不支持生成明文配置', type='warning')
+                                    ui.notify(text or '该协议不支持生成明文配置', type='warning')
 
                             ui.button(icon='description', on_click=copy_detail_action).props(btn_props).tooltip('复制明文配置').classes('text-slate-400 hover:bg-slate-600 hover:text-orange-400')
 
