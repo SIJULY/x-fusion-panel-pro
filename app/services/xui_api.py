@@ -4,6 +4,32 @@ from app.core.logging import logger
 
 
 class XUIManager:
+    @staticmethod
+    def _normalize_inbound_item(item):
+        if not isinstance(item, dict):
+            return item
+
+        import json
+
+        if item.get('stream_settings') and not item.get('streamSettings'):
+            item['streamSettings'] = item.get('stream_settings')
+
+        for key in ['settings', 'streamSettings', 'stream_settings', 'sniffing']:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                try:
+                    item[key] = json.loads(value)
+                except:
+                    pass
+
+        if item.get('stream_settings') and not item.get('streamSettings'):
+            item['streamSettings'] = item.get('stream_settings')
+
+        item['expiryTime'] = int(item.get('expiryTime') or item.get('expiry_time') or 0)
+        if 'enable' in item:
+            item['enable'] = bool(item.get('enable'))
+        return item
+
     def __init__(self, url, username, password, api_prefix=None):
         self.original_url = str(url).strip().rstrip('/')
         self.url = self.original_url
@@ -77,7 +103,10 @@ class XUIManager:
                 try:
                     res = r.json()
                     if res.get('success'):
-                        return res.get('obj')
+                        obj = res.get('obj')
+                        if isinstance(obj, list):
+                            return [self._normalize_inbound_item(x) for x in obj]
+                        return obj
                 except:
                     pass
         return None
