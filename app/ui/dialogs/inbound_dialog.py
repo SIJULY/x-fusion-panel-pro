@@ -95,6 +95,7 @@ class InboundEditor:
         self.stream_box = None
         self.sniffing_dest_box = None
         self.sniffing_dest = None
+        self.ss_network_input = None
 
         if not data:
             random_port = random.randint(10000, 65000)
@@ -247,20 +248,22 @@ class InboundEditor:
             self.auth_box = ui.column().classes('w-full gap-3')
             self.refresh_auth_ui()
 
-            with ui.expansion('传输与安全', icon='lan', value=True).classes('w-full'):
+            with ui.expansion('传输设置', icon='lan', value=True).classes('w-full'):
                 with ui.column().classes('w-full gap-3 pt-3'):
                     with ui.row().classes('w-full gap-4 items-end'):
-                        self.net = ui.select(['tcp', 'ws', 'grpc', 'httpupgrade', 'xhttp'], value=self.stream.get('network', 'tcp'), label='传输协议', on_change=self.on_stream_change).classes('w-1/4')
-                        self.sec = ui.select(['none', 'tls', 'reality'], value=self.stream.get('security', 'none'), label='安全加密', on_change=self.on_stream_change).classes('w-1/4')
+                        self.net = ui.select(['tcp', 'ws', 'grpc'], value=self.stream.get('network', 'tcp'), label='传输协议', on_change=self.on_stream_change).classes('w-1/3')
+                        self.sec = ui.select(['none', 'tls', 'reality'], value=self.stream.get('security', 'none'), label='安全', on_change=self.on_stream_change).classes('w-1/3')
                     self.stream_box = ui.column().classes('w-full gap-3')
                     self.refresh_stream_ui()
 
-            with ui.expansion('高级业务参数（默认关闭，按需展开）', icon='tune', value=False).classes('w-full'):
+            with ui.expansion('更多设置', icon='tune', value=False).classes('w-full'):
                 with ui.column().classes('w-full gap-3 pt-3'):
                     with ui.row().classes('w-full gap-4'):
                         self.listen_input = ui.input('监听地址', value=self.d.get('listen', ''), placeholder='留空=全部监听').classes('w-1/3')
                         self.tag_input = ui.input('Tag', value=self.d.get('tag', ''), placeholder='可选').classes('w-1/3')
                         self.sniffing_enabled = ui.switch('启用嗅探', value=bool(self.sniffing.get('enabled', True)), on_change=self.on_sniffing_change).classes('mt-2')
+                    if self.pro.value == 'shadowsocks':
+                        self.ss_network_input = ui.input('网络', value=self.settings.get('network', 'tcp,udp'), placeholder='如: tcp,udp').classes('w-1/3')
                     self.sniffing_dest_box = ui.column().classes('w-full')
                     self.refresh_sniffing_ui()
 
@@ -294,9 +297,9 @@ class InboundEditor:
                 client = self.settings.get('clients', [{}])[0]
                 self.settings['clients'] = [client]
                 with ui.row().classes('w-full gap-3 items-end'):
-                    id_input = ui.input('ID', value=client.get('id', '')).classes('flex-1')
+                    id_input = ui.input('UUID', value=client.get('id', '')).classes('flex-1')
                     id_input.on_value_change(lambda e, c=client: c.update({'id': e.value}))
-                    ui.button(icon='casino', on_click=lambda inp=id_input: inp.set_value(str(uuid.uuid4()))).props('flat dense').tooltip('生成 ID')
+                    ui.button(icon='casino', on_click=lambda inp=id_input: inp.set_value(str(uuid.uuid4()))).props('flat dense').tooltip('生成 UUID')
             elif protocol == 'trojan':
                 client = self.settings.get('clients', [{}])[0]
                 self.settings['clients'] = [client]
@@ -306,9 +309,8 @@ class InboundEditor:
                     ui.button(icon='casino', on_click=lambda inp=pwd_input: inp.set_value(uuid.uuid4().hex[:8])).props('flat dense').tooltip('生成密码')
             elif protocol == 'shadowsocks':
                 with ui.row().classes('w-full gap-4'):
-                    ui.select(['aes-256-gcm', 'chacha20-ietf-poly1305', 'aes-128-gcm'], value=self.settings.get('method', 'aes-256-gcm'), label='加密').classes('w-1/3').on_value_change(lambda e: self.settings.update({'method': e.value}))
-                    ui.input('密码', value=self.settings.get('password', '')).classes('w-1/3').on_value_change(lambda e: self.settings.update({'password': e.value}))
-                    ui.input('网络', value=self.settings.get('network', 'tcp,udp')).classes('w-1/3').on_value_change(lambda e: self.settings.update({'network': e.value}))
+                    ui.select(['aes-256-gcm', 'chacha20-ietf-poly1305', 'aes-128-gcm'], value=self.settings.get('method', 'aes-256-gcm'), label='加密').classes('w-1/2').on_value_change(lambda e: self.settings.update({'method': e.value}))
+                    ui.input('密码', value=self.settings.get('password', '')).classes('w-1/2').on_value_change(lambda e: self.settings.update({'password': e.value}))
             elif protocol == 'socks':
                 accounts = self.settings.get('accounts', [{}])
                 account = accounts[0] if accounts else {'user': 'admin', 'pass': 'admin'}
@@ -336,8 +338,6 @@ class InboundEditor:
         ws = self.stream.setdefault('wsSettings', {'path': '/', 'headers': {'Host': ''}, 'maxEarlyData': 0, 'earlyDataHeaderName': 'Sec-WebSocket-Protocol'})
         ws.setdefault('headers', {})
         grpc = self.stream.setdefault('grpcSettings', {'serviceName': '', 'multiMode': False, 'authority': ''})
-        httpupgrade = self.stream.setdefault('httpupgradeSettings', {'path': '/', 'host': ''})
-        xhttp = self.stream.setdefault('xhttpSettings', {'path': '/', 'host': '', 'mode': 'auto'})
         tls = self.stream.setdefault('tlsSettings', {'serverName': '', 'alpn': [], 'allowInsecure': False, 'certificates': []})
         reality = self.stream.setdefault('realitySettings', {'serverName': '', 'publicKey': '', 'privateKey': '', 'shortId': '', 'spiderX': '/', 'fingerprint': 'chrome', 'show': False})
 
@@ -359,16 +359,6 @@ class InboundEditor:
                     ui.input('gRPC Service Name', value=grpc.get('serviceName', '')).classes('w-1/3').on_value_change(lambda e: grpc.update({'serviceName': e.value}))
                     ui.input('Authority', value=grpc.get('authority', '')).classes('w-1/3').on_value_change(lambda e: grpc.update({'authority': e.value}))
                     ui.switch('MultiMode', value=bool(grpc.get('multiMode', False))).classes('mt-2').on_value_change(lambda e: grpc.update({'multiMode': bool(e.value)}))
-            elif net == 'httpupgrade':
-                with ui.row().classes('w-full gap-4'):
-                    ui.input('HTTPUpgrade Path', value=httpupgrade.get('path', '/')).classes('w-1/2').on_value_change(lambda e: httpupgrade.update({'path': e.value or '/'}))
-                    ui.input('HTTPUpgrade Host', value=httpupgrade.get('host', '')).classes('w-1/2').on_value_change(lambda e: httpupgrade.update({'host': e.value}))
-            elif net == 'xhttp':
-                with ui.row().classes('w-full gap-4'):
-                    ui.input('XHTTP Path', value=xhttp.get('path', '/')).classes('w-1/3').on_value_change(lambda e: xhttp.update({'path': e.value or '/'}))
-                    ui.input('XHTTP Host', value=xhttp.get('host', '')).classes('w-1/3').on_value_change(lambda e: xhttp.update({'host': e.value}))
-                    ui.select(['auto', 'packet-up', 'stream-up'], value=xhttp.get('mode', 'auto'), label='XHTTP Mode').classes('w-1/3').on_value_change(lambda e: xhttp.update({'mode': e.value}))
-
             if sec in ['tls', 'reality']:
                 certs = tls.get('certificates', []) if isinstance(tls.get('certificates', []), list) else []
                 cert0 = certs[0] if certs else {}
@@ -416,10 +406,6 @@ class InboundEditor:
             stream['wsSettings'] = self.stream.get('wsSettings', {})
         elif network == 'grpc':
             stream['grpcSettings'] = self.stream.get('grpcSettings', {})
-        elif network == 'httpupgrade':
-            stream['httpupgradeSettings'] = self.stream.get('httpupgradeSettings', {})
-        elif network == 'xhttp':
-            stream['xhttpSettings'] = self.stream.get('xhttpSettings', {})
 
         if security in ['tls', 'reality']:
             certs = []
@@ -462,10 +448,12 @@ class InboundEditor:
         if protocol == 'trojan':
             return {'clients': self.settings.get('clients', [])}
         if protocol == 'shadowsocks':
+            network_value = self.ss_network_input.value if self.ss_network_input else self.settings.get('network', 'tcp,udp')
+            self.settings['network'] = network_value
             return {
                 'method': self.settings.get('method', 'aes-256-gcm'),
                 'password': self.settings.get('password', ''),
-                'network': self.settings.get('network', 'tcp,udp'),
+                'network': network_value,
             }
         if protocol == 'socks':
             return {
