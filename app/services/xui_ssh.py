@@ -83,10 +83,17 @@ if os.path.exists(db_path):
     result = []
     for row in rows:
         d = dict(row)
-        for k in ['settings', 'streamSettings', 'sniffing']:
+        if d.get('stream_settings') and not d.get('streamSettings'):
+            d['streamSettings'] = d.get('stream_settings')
+        for k in ['settings', 'streamSettings', 'stream_settings', 'sniffing']:
             if d.get(k):
-                try: d[k] = json.loads(d[k])
-                except: pass
+                try:
+                    d[k] = json.loads(d[k])
+                except:
+                    pass
+        if d.get('stream_settings') and not d.get('streamSettings'):
+            d['streamSettings'] = d.get('stream_settings')
+        d['expiryTime'] = int(d.get('expiryTime') or d.get('expiry_time') or 0)
         d['enable'] = bool(d['enable'])
         result.append(d)
     print(json.dumps(result))
@@ -108,10 +115,14 @@ else:
             "protocol": inbound_data.get('protocol'),
             "settings": json.dumps(inbound_data.get('settings', {})),
             "stream_settings": json.dumps(inbound_data.get('streamSettings', {})),
-            "enable": 1,
-            "expiry_time": 0,
-            "listen": "",
-            "total": 0, "up": 0, "down": 0, "tag": "", "sniffing": "{}"
+            "enable": 1 if inbound_data.get('enable', True) else 0,
+            "expiry_time": int(inbound_data.get('expiryTime') or inbound_data.get('expiry_time') or 0),
+            "listen": inbound_data.get('listen', ''),
+            "total": int(inbound_data.get('total') or 0),
+            "up": int(inbound_data.get('up') or 0),
+            "down": int(inbound_data.get('down') or 0),
+            "tag": inbound_data.get('tag', ''),
+            "sniffing": json.dumps(inbound_data.get('sniffing', {})),
         }
         payload_json = json.dumps(payload)
 
@@ -190,7 +201,12 @@ print(f"SUCCESS (DB: {{db_path}})")
             "protocol": inbound_data.get('protocol'),
             "settings": json.dumps(inbound_data.get('settings', {})),
             "stream_settings": json.dumps(inbound_data.get('streamSettings', {})),
-            "enable": 1 if inbound_data.get('enable', True) else 0
+            "enable": 1 if inbound_data.get('enable', True) else 0,
+            "total": int(inbound_data.get('total') or 0),
+            "expiry_time": int(inbound_data.get('expiryTime') or inbound_data.get('expiry_time') or 0),
+            "listen": inbound_data.get('listen', ''),
+            "tag": inbound_data.get('tag', ''),
+            "sniffing": json.dumps(inbound_data.get('sniffing', {})),
         }
         payload_json = json.dumps(payload)
 
@@ -203,12 +219,33 @@ time.sleep(0.5)
 con = sqlite3.connect(db_path)
 cur = con.cursor()
 
-sql = "UPDATE inbounds SET remark=?, port=?, protocol=?, settings=?, stream_settings=?, enable=? WHERE id=?"
-cur.execute(sql, (
-    params['remark'], params['port'], params['protocol'], 
-    params['settings'], params['stream_settings'], params['enable'], 
-    params['id']
-))
+cur.execute("PRAGMA table_info(inbounds)")
+columns = [info[1] for info in cur.fetchall()]
+
+update_map = {
+    'remark': params['remark'],
+    'port': params['port'],
+    'protocol': params['protocol'],
+    'settings': params['settings'],
+    'stream_settings': params['stream_settings'],
+    'enable': params['enable'],
+    'total': params['total'],
+    'expiry_time': params['expiry_time'],
+    'listen': params['listen'],
+    'tag': params['tag'],
+    'sniffing': params['sniffing'],
+}
+
+assignments = []
+values = []
+for key, value in update_map.items():
+    if key in columns:
+        assignments.append(f"{key}=?")
+        values.append(value)
+
+sql = f"UPDATE inbounds SET {', '.join(assignments)} WHERE id=?"
+values.append(params['id'])
+cur.execute(sql, tuple(values))
 
 if cur.rowcount == 0:
     con.close()
