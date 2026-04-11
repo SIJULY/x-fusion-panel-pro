@@ -33,6 +33,12 @@ def get_targets_by_scope(scope, data):
         elif scope == 'SINGLE':
             if data in SERVERS_CACHE:
                 targets = [data]
+            elif isinstance(data, dict):
+                data_url = data.get('url')
+                if data_url:
+                    matched = next((s for s in SERVERS_CACHE if s.get('url') == data_url), None)
+                    if matched:
+                        targets = [matched]
     except:
         pass
     return targets
