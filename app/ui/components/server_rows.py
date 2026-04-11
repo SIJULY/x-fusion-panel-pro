@@ -44,6 +44,12 @@ def show_custom_node_info(node):
 
 
 def draw_row(srv, node, css_style, use_special_mode, is_first=True):
+    parent_client = None
+    try:
+        parent_client = ui.context.client
+    except:
+        pass
+
     card_cls = 'grid w-full gap-4 py-3 px-4 items-center group relative bg-[#1e293b] rounded-xl border border-slate-700 border-b-[3px] shadow-sm transition-all duration-150 ease-out hover:shadow-md hover:border-blue-500 hover:bg-[#252f45] hover:-translate-y-[1px] mb-2'
 
     with ui.element('div').classes(card_cls).style(css_style):
@@ -64,7 +70,7 @@ def draw_row(srv, node, css_style, use_special_mode, is_first=True):
             if not use_special_mode:
                 ui.element('div')
             with ui.row().classes('gap-1 justify-center w-full no-wrap'):
-                ui.button(icon='settings', on_click=lambda _, s=srv: __import__('asyncio').create_task(_refresh_single_server(s))).props('flat dense size=sm round color=grey')
+                ui.button(icon='settings', on_click=lambda _, s=srv, c=parent_client: __import__('asyncio').create_task(_refresh_single_server(s, c))).props('flat dense size=sm round color=grey')
             return
 
         remark = node.get('ps') or node.get('remark') or '未命名节点'
@@ -140,10 +146,19 @@ def draw_row(srv, node, css_style, use_special_mode, is_first=True):
                     ui.notify('不支持生成配置', type='warning')
 
             ui.button(icon='description', on_click=copy_detail).props('flat dense size=sm round').tooltip('复制明文配置').classes('text-slate-500 hover:text-orange-400 hover:bg-slate-700')
-            ui.button(icon='settings', on_click=lambda _, s=srv: __import__('asyncio').create_task(_refresh_single_server(s))).props('flat dense size=sm round').tooltip('管理服务器').classes('text-slate-500 hover:text-white hover:bg-slate-700')
+            ui.button(icon='settings', on_click=lambda _, s=srv, c=parent_client: __import__('asyncio').create_task(_refresh_single_server(s, c))).props('flat dense size=sm round').tooltip('管理服务器').classes('text-slate-500 hover:text-white hover:bg-slate-700')
 
 
-async def _refresh_single_server(server):
+async def _refresh_single_server(server, client=None):
+    from app.core.state import SERVERS_CACHE
     from app.ui.pages.content_router import refresh_content
 
-    await refresh_content('SINGLE', server)
+    target = server
+    try:
+        server_url = server.get('url') if isinstance(server, dict) else None
+        if server_url:
+            target = next((s for s in SERVERS_CACHE if s.get('url') == server_url), server)
+    except:
+        pass
+
+    await refresh_content('SINGLE', target, manual_client=client)
