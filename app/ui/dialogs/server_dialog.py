@@ -816,7 +816,7 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
         ui.element('div').classes('h-6 flex-shrink-0')
 
-        with ui.card().classes('w-full h-[750px] flex-shrink-0 p-0 rounded-xl border border-gray-300 border-b-[4px] border-b-gray-400 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
+        with ui.card().classes('w-full h-[750px] min-h-0 flex-shrink-0 p-0 rounded-xl border border-gray-300 border-b-[4px] border-b-gray-400 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
             ssh_state = {'active': False, 'instance': None}
 
             def render_ssh_area():
@@ -829,7 +829,7 @@ async def render_single_server_view(server_conf, force_refresh=False):
                     else:
                         ui.label('Disconnected').classes('text-[10px] text-gray-500')
 
-                box_cls = 'w-full flex-grow bg-[#0f0f0f] overflow-hidden'
+                box_cls = 'w-full min-h-0 flex-grow bg-[#0f0f0f] overflow-hidden'
                 if not ssh_state['active']:
                     box_cls += ' flex justify-center items-center'
                 else:
