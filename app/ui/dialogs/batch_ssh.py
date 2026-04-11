@@ -1,9 +1,10 @@
 import asyncio
+import socket
 
 from nicegui import run, ui
 
 from app.core.state import SERVERS_CACHE
-from app.services.ssh import get_ssh_client_sync
+from app.services.ssh import WebSSH, get_ssh_client_sync
 from app.ui.common.notifications import safe_notify
 
 
@@ -12,6 +13,57 @@ class BatchSSH:
         self.selected_urls = set()
         self.log_element = None
         self.dialog = None
+
+    @staticmethod
+    def _is_interactive_command(cmd: str) -> bool:
+        cmd = (cmd or '').strip()
+        interactive_prefixes = ('sudo -i', 'sudo su', 'su -', 'bash', 'sh')
+        return any(cmd == p or cmd.startswith(f'{p} ') for p in interactive_prefixes)
+
+    def _open_interactive_terminal(self, server, initial_command):
+        terminal_state = {'instance': None}
+        parent_client = None
+        try:
+            parent_client = ui.context.client
+        except:
+            pass
+
+        with ui.dialog() as d, ui.card().classes('w-full max-w-6xl h-[85vh] flex flex-col p-0 overflow-hidden bg-[#0f172a] border border-slate-700'):
+            with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('terminal').classes('text-green-400')
+                    ui.label(f"交互终端 · {server.get('name', '未命名服务器')}").classes('text-slate-200 font-bold')
+                ui.button(icon='close', on_click=d.close).props('flat round dense color=grey')
+
+            terminal_box = ui.element('div').classes('w-full flex-grow bg-black overflow-hidden flex items-center justify-center')
+            with terminal_box:
+                ui.label('正在连接交互终端...').classes('text-slate-500 text-sm')
+
+            async def _start_terminal():
+                await asyncio.sleep(0.15)
+                try:
+                    terminal_box.clear()
+                except:
+                    pass
+                ssh = WebSSH(terminal_box, server, initial_command=initial_command)
+                terminal_state['instance'] = ssh
+                await ssh.connect()
+
+            async def _cleanup():
+                try:
+                    if terminal_state['instance']:
+                        terminal_state['instance'].close()
+                except:
+                    pass
+
+            d.on('hide', lambda _: asyncio.create_task(_cleanup()))
+
+        d.open()
+        if parent_client:
+            with parent_client:
+                asyncio.create_task(_start_terminal())
+        else:
+            asyncio.create_task(_start_terminal())
 
     def open_dialog(self):
         self.selected_urls = set()
@@ -92,6 +144,32 @@ class BatchSSH:
         cmd = self.cmd_input.value.strip()
         if not cmd:
             return safe_notify('请输入命令', 'warning')
+
+        if self._is_interactive_command(cmd):
+            supported_examples = [
+                'whoami',
+                'sudo -n whoami',
+                'sudo -n systemctl status snell --no-pager -l',
+                "sudo -n bash -lc 'whoami && pwd'",
+            ]
+            if len(self.selected_urls) == 1:
+                server = next((s for s in SERVERS_CACHE if s['url'] in self.selected_urls), None)
+                if not server:
+                    self.log_container.push('❌ 未找到目标服务器')
+                    return
+                self.log_container.push(f"🖥️ 检测到交互式命令，正在为 [{server.get('name', '未命名服务器')}] 打开交互终端...")
+                self.log_container.push(f"↪ 已自动发送初始命令: {cmd}")
+                self.log_container.push('-' * 30)
+                self._open_interactive_terminal(server, cmd)
+                return
+            self.log_container.push('❌ 当前选择了多台服务器，不能执行交互式命令。')
+            self.log_container.push('💡 交互式命令示例: sudo -i / sudo su / su - / bash / sh')
+            self.log_container.push('💡 如果要批量执行，请改用非交互式格式，例如:')
+            for example in supported_examples:
+                self.log_container.push(f'   - {example}')
+            self.log_container.push('-' * 30)
+            return
+
         self.run_btn.disable()
         self.cmd_input.disable()
         self.log_container.push(f"🚀 [Batch] Start: {cmd}")
@@ -121,23 +199,39 @@ class BatchSSH:
                         if not client:
                             return False, msg
                         try:
-                            stdin, stdout, stderr = client.exec_command(cmd, timeout=60)
-                            out = stdout.read().decode().strip()
-                            err = stderr.read().decode().strip()
+                            stdin, stdout, stderr = client.exec_command(cmd, timeout=60, get_pty=True)
+                            out = stdout.read().decode('utf-8', errors='ignore').strip()
+                            err = stderr.read().decode('utf-8', errors='ignore').strip()
+                            try:
+                                exit_status = stdout.channel.recv_exit_status()
+                            except:
+                                exit_status = 0
                             client.close()
-                            return True, (out, err)
+                            return True, (out, err, exit_status)
+                        except socket.timeout:
+                            try:
+                                client.close()
+                            except:
+                                pass
+                            return False, '执行超时：命令可能在等待交互输入（如 sudo -i / su - / vim），请改用非交互命令或去 WebSSH 执行'
                         except Exception as e:
-                            return False, str(e)
+                            try:
+                                client.close()
+                            except:
+                                pass
+                            return False, (str(e) or repr(e) or '未知 SSH 执行错误')
 
                     success, result = await run.io_bound(ssh_exec)
                     if success:
-                        out, err = result
+                        out, err, exit_status = result
                         if out:
                             log_safe(f"✅ [{name}] OUT:\n{out}")
                         if err:
                             log_safe(f"⚠️ [{name}] ERR:\n{err}")
                         if not out and not err:
                             log_safe(f"✅ [{name}] Done (No Output)")
+                        if exit_status not in (0, None):
+                            log_safe(f"⚠️ [{name}] Exit Status: {exit_status}")
                     else:
                         log_safe(f"❌ [{name}] Failed: {result}")
                 except Exception as e:
