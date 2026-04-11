@@ -92,9 +92,10 @@ def get_ssh_client_sync(server_data):
 
 
 class WebSSH:
-    def __init__(self, container, server_data):
+    def __init__(self, container, server_data, initial_command=None):
         self.container = container
         self.server_data = server_data
+        self.initial_command = (initial_command or '').strip()
         self.client = None
         self.channel = None
         self.active = False
@@ -103,7 +104,7 @@ class WebSSH:
     async def connect(self):
         with self.container:
             try:
-                ui.element('div').props(f'id={self.term_id}').classes('w-full h-full bg-black rounded p-2 overflow-hidden relative')
+                ui.element('div').props(f'id={self.term_id}').classes('w-full h-full min-h-0 bg-black rounded p-2 overflow-hidden relative')
 
                 init_js = f"""
                 try {{
@@ -115,47 +116,66 @@ class WebSSH:
                     }}
                     
                     if (typeof Terminal === 'undefined') {{
-                        throw new Error("xterm.js 库未加载");
+                        throw new Error('xterm.js 库未加载');
                     }}
-                    
+
+                    var el = document.getElementById('{self.term_id}');
+                    if (!el) {{
+                        throw new Error('终端挂载节点不存在');
+                    }}
+                    el.innerHTML = '';
+                    el.style.width = '100%';
+                    el.style.height = '100%';
+
                     var term = new Terminal({{
                         cursorBlink: true,
                         fontSize: 13,
+                        lineHeight: 1.2,
                         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                         theme: {{ background: '#000000', foreground: '#ffffff' }},
                         convertEol: true,
                         scrollback: 5000
                     }});
-                    
-                    var fitAddon;
+
+                    var fitAddon = null;
                     if (typeof FitAddon !== 'undefined') {{
                         var FitAddonClass = FitAddon.FitAddon || FitAddon;
                         fitAddon = new FitAddonClass();
                         term.loadAddon(fitAddon);
                     }}
-                    
-                    var el = document.getElementById('{self.term_id}');
+
                     term.open(el);
-                    
                     term.write('\\x1b[32m[Local] Terminal Ready. Connecting...\\x1b[0m\\r\\n');
-                    
-                    if (fitAddon) {{ setTimeout(() => {{ fitAddon.fit(); }}, 200); }}
-                    
+
+                    var doFit = function() {{
+                        try {{
+                            if (fitAddon) fitAddon.fit();
+                            term.scrollToBottom();
+                            term.focus();
+                        }} catch (e) {{}}
+                    }};
+
+                    setTimeout(doFit, 50);
+                    setTimeout(doFit, 200);
+                    setTimeout(doFit, 500);
+
                     window.{self.term_id} = term;
                     term.focus();
-                    
+
                     term.onData(data => {{
                         emitEvent('term_input_{self.term_id}', data);
                     }});
-                    
-                    if (fitAddon) {{ new ResizeObserver(() => fitAddon.fit()).observe(el); }}
 
+                    if (fitAddon) {{
+                        new ResizeObserver(() => doFit()).observe(el);
+                    }}
                 }} catch(e) {{
-                    console.error("Terminal Init Error:", e);
-                    alert("终端启动失败: " + e.message);
+                    console.error('Terminal Init Error:', e);
+                    alert('终端启动失败: ' + e.message);
                 }}
                 """
-                ui.run_javascript(init_js)
+                with self.container.client:
+                    ui.run_javascript(init_js)
 
                 ui.on(f'term_input_{self.term_id}', lambda e: self._write_to_ssh(e.args))
 
@@ -193,6 +213,12 @@ class WebSSH:
                 self.channel = self.client.invoke_shell(term='xterm', width=100, height=30)
                 self.channel.settimeout(0.0)
                 self.active = True
+
+                if self.initial_command:
+                    try:
+                        self.channel.send(self.initial_command + '\n')
+                    except:
+                        pass
 
                 asyncio.create_task(self._read_loop())
                 ui.notify(f"已连接到 {self.server_data['name']}", type='positive')
@@ -236,6 +262,9 @@ class WebSSH:
                             var decodedStr = new TextDecoder("utf-8").decode(bytes);
                             
                             window.{self.term_id}.write(decodedStr);
+                            if (typeof window.{self.term_id}.scrollToBottom === 'function') {{
+                                window.{self.term_id}.scrollToBottom();
+                            }}
                         }} catch(e) {{
                             console.error("Term Decode Error", e);
                         }}
