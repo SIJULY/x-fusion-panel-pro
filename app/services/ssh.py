@@ -104,7 +104,7 @@ class WebSSH:
     async def connect(self):
         with self.container:
             try:
-                ui.element('div').props(f'id={self.term_id}').classes('w-full h-full min-h-0 bg-black rounded p-2 overflow-hidden relative')
+                ui.element('div').props(f'id={self.term_id}').classes('w-full h-full bg-black rounded overflow-hidden relative').style('min-height: 420px; height: 100%; width: 100%; display: block; position: relative;')
 
                 init_js = f"""
                 try {{
@@ -126,6 +126,9 @@ class WebSSH:
                     el.innerHTML = '';
                     el.style.width = '100%';
                     el.style.height = '100%';
+                    el.style.minHeight = '420px';
+                    el.style.display = 'block';
+                    el.style.position = 'relative';
 
                     var term = new Terminal({{
                         cursorBlink: true,
@@ -158,6 +161,9 @@ class WebSSH:
                     setTimeout(doFit, 50);
                     setTimeout(doFit, 200);
                     setTimeout(doFit, 500);
+                    setTimeout(doFit, 1000);
+                    setTimeout(doFit, 1500);
+                    requestAnimationFrame(doFit);
 
                     window.{self.term_id} = term;
                     term.focus();
@@ -168,7 +174,11 @@ class WebSSH:
 
                     if (fitAddon) {{
                         new ResizeObserver(() => doFit()).observe(el);
+                        if (el.parentElement) {{
+                            new ResizeObserver(() => doFit()).observe(el.parentElement);
+                        }}
                     }}
+                    window.addEventListener('resize', doFit);
                 }} catch(e) {{
                     console.error('Terminal Init Error:', e);
                     alert('终端启动失败: ' + e.message);
