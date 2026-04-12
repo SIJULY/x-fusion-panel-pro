@@ -181,7 +181,7 @@ def main_page(request: Request):
         last_scope = app.storage.user.get('last_view_scope', 'DASHBOARD')
         last_data_id = app.storage.user.get('last_view_data', None)
         target_data = last_data_id
-        if last_scope == 'SINGLE' and last_data_id:
+        if last_scope in ['SINGLE', 'SSH_SINGLE'] and last_data_id:
             target_data = next((s for s in SERVERS_CACHE if s['url'] == last_data_id), None)
             if not target_data:
                 last_scope = 'DASHBOARD'
