@@ -4,7 +4,7 @@ import socket
 from nicegui import run, ui
 
 from app.core.state import SERVERS_CACHE
-from app.services.ssh import WebSSH, get_ssh_client_sync
+from app.services.ssh import get_ssh_client_sync
 from app.ui.common.notifications import safe_notify
 
 
@@ -19,51 +19,6 @@ class BatchSSH:
         cmd = (cmd or '').strip()
         interactive_prefixes = ('sudo -i', 'sudo su', 'su -', 'bash', 'sh')
         return any(cmd == p or cmd.startswith(f'{p} ') for p in interactive_prefixes)
-
-    def _open_interactive_terminal(self, server, initial_command):
-        terminal_state = {'instance': None}
-        parent_client = None
-        try:
-            parent_client = ui.context.client
-        except:
-            pass
-
-        with ui.dialog() as d, ui.card().classes('w-full max-w-6xl h-[85vh] flex flex-col p-0 overflow-hidden bg-[#0f172a] border border-slate-700'):
-            with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
-                with ui.row().classes('items-center gap-2'):
-                    ui.icon('terminal').classes('text-green-400')
-                    ui.label(f"交互终端 · {server.get('name', '未命名服务器')}").classes('text-slate-200 font-bold')
-                ui.button(icon='close', on_click=d.close).props('flat round dense color=grey')
-
-            terminal_box = ui.element('div').classes('w-full flex-grow bg-black overflow-hidden flex items-center justify-center')
-            with terminal_box:
-                ui.label('正在连接交互终端...').classes('text-slate-500 text-sm')
-
-            async def _start_terminal():
-                await asyncio.sleep(0.15)
-                try:
-                    terminal_box.clear()
-                except:
-                    pass
-                ssh = WebSSH(terminal_box, server, initial_command=initial_command)
-                terminal_state['instance'] = ssh
-                await ssh.connect()
-
-            async def _cleanup():
-                try:
-                    if terminal_state['instance']:
-                        terminal_state['instance'].close()
-                except:
-                    pass
-
-            d.on('hide', lambda _: asyncio.create_task(_cleanup()))
-
-        d.open()
-        if parent_client:
-            with parent_client:
-                asyncio.create_task(_start_terminal())
-        else:
-            asyncio.create_task(_start_terminal())
 
     def open_dialog(self):
         self.selected_urls = set()
@@ -157,10 +112,10 @@ class BatchSSH:
                 if not server:
                     self.log_container.push('❌ 未找到目标服务器')
                     return
-                self.log_container.push(f"🖥️ 检测到交互式命令，正在为 [{server.get('name', '未命名服务器')}] 打开交互终端...")
-                self.log_container.push(f"↪ 已自动发送初始命令: {cmd}")
+                self.log_container.push(f"⚠️ 检测到交互式命令，批量 SSH 不再弹出交互终端: [{server.get('name', '未命名服务器')}]")
+                self.log_container.push('💡 请改用单机详情页右上角 SSH 按钮进入交互终端。')
+                self.log_container.push(f'💡 当前命令: {cmd}')
                 self.log_container.push('-' * 30)
-                self._open_interactive_terminal(server, cmd)
                 return
             self.log_container.push('❌ 当前选择了多台服务器，不能执行交互式命令。')
             self.log_container.push('💡 交互式命令示例: sudo -i / sudo su / su - / bash / sh')
