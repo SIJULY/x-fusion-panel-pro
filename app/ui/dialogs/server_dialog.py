@@ -2,6 +2,10 @@ import asyncio
 import json
 import time
 import uuid
+import tempfile
+import os
+import time as time_module
+import base64
 
 from nicegui import run, ui
 
@@ -579,8 +583,6 @@ async def open_server_dialog(idx=None):
     d.open()
 
 
-
-
 def cleanup_ssh_route_terminal(server_key=None):
     keys = [server_key] if server_key else list(SSH_PAGE_TERMINALS.keys())
     for key in keys:
@@ -593,6 +595,20 @@ def cleanup_ssh_route_terminal(server_key=None):
 
 
 async def render_single_ssh_view(server_conf):
+    from app.services.sftp import (
+        create_empty_remote_file,
+        delete_remote_path,
+        download_remote_file,
+        get_parent_remote_path,
+        is_probably_text_file,
+        join_remote_path,
+        list_remote_dir,
+        make_remote_dir,
+        normalize_remote_path,
+        read_remote_file,
+        write_remote_file,
+        upload_remote_file,
+    )
     from app.ui.pages.content_router import content_container, refresh_content
 
     server_key = server_conf.get('url') or server_conf.get('ssh_host') or str(id(server_conf))
@@ -606,9 +622,19 @@ async def render_single_ssh_view(server_conf):
 
     if content_container:
         content_container.clear()
-        content_container.classes(remove='overflow-y-auto block', add='h-full overflow-hidden flex flex-col p-4')
+        content_container.classes(remove='overflow-y-auto block', add='h-full min-h-0 overflow-hidden flex flex-col p-4 gap-4')
 
     terminal_state = {'instance': None}
+    file_state = {'current_path': '/', 'entries': [], 'loading': False}
+    tree_state = {'expanded': {'/'}, 'selected': '/', 'cache': {}, 'loading': set()}
+    path_input = None
+    
+    editor_state = {
+        'dialog': None,
+        'files': {}, 
+        'active_path': None,
+        'refresh_tabs': None
+    }
 
     async def _start_terminal(terminal_box):
         await asyncio.sleep(0.15)
@@ -624,6 +650,29 @@ async def render_single_ssh_view(server_conf):
     async def _back_to_detail():
         cleanup_ssh_route_terminal(server_key)
         await refresh_content('SINGLE', server_conf, manual_client=current_client)
+
+    def format_file_size(size):
+        try:
+            size = float(size or 0)
+            for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+                if size < 1024 or unit == 'TB':
+                    return f'{size:.1f} {unit}' if unit != 'B' else f'{int(size)} B'
+                size /= 1024
+        except:
+            return '--'
+
+    def format_mtime(value):
+        try:
+            if not value:
+                return '--'
+            return time_module.strftime('%Y-%m-%d %H:%M', time_module.localtime(value))
+        except:
+            return '--'
+
+    def basename(path):
+        if path == '/':
+            return '/'
+        return path.rstrip('/').split('/')[-1] or '/'
 
     def exec_quick_cmd(cmd_text):
         if terminal_state['instance'] and terminal_state['instance'].active:
@@ -685,8 +734,502 @@ async def render_single_ssh_view(server_conf):
                     ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props('flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
             ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props('flat dense round size=sm color=green').tooltip('添加常用命令')
 
+    async def ensure_tree_children(path, force=False):
+        path = normalize_remote_path(path)
+        if not force and path in tree_state['cache']:
+            return
+        tree_state['loading'].add(path)
+        render_tree.refresh()
+        try:
+            entries = await run.io_bound(list_remote_dir, server_conf, path)
+            tree_state['cache'][path] = [e for e in entries if e.get('is_dir')]
+        except Exception:
+            tree_state['cache'][path] = []
+        finally:
+            tree_state['loading'].discard(path)
+            render_tree.refresh()
+
+    async def refresh_remote_dir(target_path=None):
+        nonlocal path_input
+        if target_path is not None:
+            normalized = normalize_remote_path(target_path)
+            file_state['current_path'] = normalized
+            tree_state['selected'] = normalized
+        file_state['loading'] = True
+        render_file_list.refresh()
+        try:
+            file_state['entries'] = await run.io_bound(list_remote_dir, server_conf, file_state['current_path'])
+            await ensure_tree_children(file_state['current_path'], force=True)
+            if path_input:
+                path_input.value = file_state['current_path']
+                path_input.update()
+        except Exception as e:
+            file_state['entries'] = []
+            safe_notify(f'读取目录失败: {e}', 'negative')
+        finally:
+            file_state['loading'] = False
+            render_file_list.refresh()
+            render_tree.refresh()
+
+    async def change_dir(target_path):
+        target_path = normalize_remote_path(target_path)
+        tree_state['expanded'].add(get_parent_remote_path(target_path))
+        await refresh_remote_dir(target_path)
+
+    async def go_parent_dir():
+        await refresh_remote_dir(get_parent_remote_path(file_state['current_path']))
+
+    async def toggle_tree_node(path):
+        path = normalize_remote_path(path)
+        if path in tree_state['expanded']:
+            tree_state['expanded'].discard(path)
+            render_tree.refresh()
+            return
+        tree_state['expanded'].add(path)
+        await ensure_tree_children(path)
+        render_tree.refresh()
+
+    async def select_tree_node(path):
+        await change_dir(path)
+
+    async def handle_entry_open(entry):
+        if entry.get('is_dir'):
+            await change_dir(entry.get('path', '/'))
+        else:
+            await open_file_editor(entry)
+
+    def detect_language(filename):
+        ext = os.path.splitext(filename)[1].lower()
+        mapping = {
+            '.py': 'python', '.js': 'javascript', '.json': 'json',
+            '.html': 'html', '.css': 'css', '.sh': 'shell',
+            '.yaml': 'yaml', '.yml': 'yaml', '.xml': 'xml',
+            '.sql': 'sql', '.md': 'markdown', '.conf': 'ini', '.ini': 'ini',
+            '.service': 'ini', '.env': 'ini', '.vue': 'html', '.jsx': 'javascript'
+        }
+        return mapping.get(ext, 'plaintext')
+
+    def switch_tab(path):
+        if path not in editor_state['files']: return
+        editor_state['active_path'] = path
+        f_data = editor_state['files'][path]
+
+        b64 = base64.b64encode(f_data['content'].encode('utf-8')).decode('utf-8')
+        js = f'''
+            if (window.editorInstance) {{
+                window.isSwitchingTab = true;
+                const text = decodeURIComponent(escape(window.atob("{b64}")));
+                window.editorInstance.setValue(text);
+                monaco.editor.setModelLanguage(window.editorInstance.getModel(), "{f_data['lang']}");
+                window.isSwitchingTab = false;
+            }}
+        '''
+        ui.run_javascript(js)
+        if editor_state.get('refresh_tabs'):
+            editor_state['refresh_tabs']()
+
+    def close_tab(path):
+        if path in editor_state['files']:
+            del editor_state['files'][path]
+            
+        if not editor_state['files']:
+            close_all()
+            return
+            
+        if editor_state['active_path'] == path:
+            switch_tab(list(editor_state['files'].keys())[0])
+        else:
+            if editor_state.get('refresh_tabs'):
+                editor_state['refresh_tabs']()
+
+    async def save_active_file():
+        path = editor_state['active_path']
+        if not path: return
+        f_data = editor_state['files'][path]
+        
+        s_notify = ui.notification('正在保存...', timeout=0, spinner=True)
+        try:
+            await run.io_bound(write_remote_file, server_conf, path, f_data['content'])
+            f_data['saved_content'] = f_data['content']
+            s_notify.dismiss()
+            safe_notify(f'✅ {f_data["name"]} 已保存', 'positive')
+            if editor_state.get('refresh_tabs'):
+                editor_state['refresh_tabs']()
+            await refresh_remote_dir(file_state['current_path'])
+        except Exception as e:
+            s_notify.dismiss()
+            safe_notify(f'❌ 保存失败: {e}', 'negative')
+
+    def close_all():
+        if editor_state['dialog']:
+            editor_state['dialog'].close()
+        editor_state.update({'dialog': None, 'files': {}})
+        ui.run_javascript('if(window.editorInstance){window.editorInstance.dispose(); window.editorInstance=null;}')
+
+    # 【终极完美版】无缝多标签页，原生JS交互（告别报错）
+    async def open_file_editor(entry):
+        remote_path = entry.get('path', '')
+        if not is_probably_text_file(remote_path):
+            safe_notify('该文件可能不是文本文件，请下载后本地编辑', 'warning')
+            return
+            
+        client = ui.context.client
+        
+        if remote_path not in editor_state['files']:
+            loading_notify = ui.notification(f'正在读取 {entry.get("name", basename(remote_path))}...', timeout=0, spinner=True)
+            try:
+                result = await run.io_bound(read_remote_file, server_conf, remote_path)
+                content = result.get('content', '')
+            except Exception as e:
+                loading_notify.dismiss()
+                safe_notify(f'打开文件失败: {e}', 'negative')
+                return
+            loading_notify.dismiss()
+            
+            editor_state['files'][remote_path] = {
+                'name': entry.get('name', basename(remote_path)),
+                'content': content,
+                'saved_content': content,
+                'lang': detect_language(entry.get('name', remote_path))
+            }
+            
+        editor_state['active_path'] = remote_path
+
+        if editor_state['dialog'] is not None:
+            with client:
+                switch_tab(remote_path)
+            return
+
+        with client:
+            card_id = f"editor_card_{uuid.uuid4().hex[:8]}"
+            header_id = f"editor_header_{uuid.uuid4().hex[:8]}"
+            
+            # 使用 seamless 彻底解除对底层文件列表的锁定，背景依然可以交互
+            with ui.dialog().props('seamless') as editor_d:
+                editor_state['dialog'] = editor_d
+                
+                with ui.card().props(f'id="{card_id}"').classes('flex flex-col p-0 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-slate-600 bg-[#1e293b]') \
+                    .style('width: 900px; max-width: 95vw; height: 650px; max-height: 95vh; resize: both; overflow: hidden; position: fixed; top: 10vh; left: 15vw; margin: 0;'):
+                    
+                    with ui.row().props(f'id="{header_id}"').classes('w-full items-center justify-between bg-[#111827] cursor-move select-none flex-nowrap no-wrap shrink-0 border-b border-slate-700').style('min-height: 38px; padding-right: 8px;'):
+                        
+                        with ui.row().classes('flex-grow flex-nowrap overflow-x-auto no-scrollbar gap-0 h-full items-end'):
+                            @ui.refreshable
+                            def render_editor_tabs():
+                                for p, f in editor_state['files'].items():
+                                    is_active = (p == editor_state['active_path'])
+                                    bg_color = 'bg-[#1e293b]' if is_active else 'bg-[#111827]'
+                                    txt_color = 'text-blue-400' if is_active else 'text-slate-400'
+                                    border = 'border-t-2 border-blue-500' if is_active else 'border-t-2 border-transparent'
+                                    
+                                    with ui.row().classes(f'{bg_color} {border} px-3 py-2 items-center gap-2 cursor-pointer border-r border-slate-700 transition-colors hover:bg-[#1e293b] flex-nowrap group').style('height: 100%;'):
+                                        ui.icon('description', size='xs').classes(txt_color)
+                                        ui.label(f['name']).classes(f'text-[12px] {txt_color} truncate max-w-[180px] font-mono select-none').on('click', lambda _, path=p: switch_tab(path))
+                                        
+                                        if f['content'] != f['saved_content']:
+                                            ui.element('div').classes('w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0')
+                                            
+                                        ui.icon('close', size='xs').classes('text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shrink-0').on('click', lambda _, path=p: close_tab(path))
+
+                            editor_state['refresh_tabs'] = render_editor_tabs.refresh
+                            render_editor_tabs()
+                            
+                        with ui.row().classes('gap-2 shrink-0 items-center pl-2'):
+                            ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
+                            ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
+
+                    # 极其稳定的自适应容器
+                    ui.element('div').props('id="monaco-container"').classes('w-full relative bg-[#1e293b]').style('flex: 1 1 auto; min-height: 0;')
+                    
+                    def on_sync(e):
+                        if editor_state['active_path']:
+                            editor_state['files'][editor_state['active_path']]['content'] = e.value
+                            if editor_state.get('refresh_tabs'):
+                                editor_state['refresh_tabs']()
+                            
+                    ui.textarea().props('id="hidden-editor-sync"').classes('hidden').on_value_change(on_sync)
+                    ui.button('ready', on_click=lambda: switch_tab(editor_state['active_path'])).props('id="monaco-ready-btn"').classes('hidden')
+            
+            editor_d.open()
+            
+            ui.run_javascript(f'''
+                setTimeout(() => {{
+                    const card = document.getElementById("{card_id}");
+                    const header = document.getElementById("{header_id}");
+                    if (card && header) {{
+                        let isDragging = false;
+                        let currentX = 0, currentY = 0;
+                        let startX, startY;
+
+                        card.style.transition = 'none';
+
+                        header.addEventListener('mousedown', (e) => {{
+                            if (e.target.closest('button') || e.target.closest('.group')) return;
+                            isDragging = true;
+                            startX = e.clientX - currentX;
+                            startY = e.clientY - currentY;
+                        }});
+
+                        document.addEventListener('mousemove', (e) => {{
+                            if (!isDragging) return;
+                            e.preventDefault();
+                            currentX = e.clientX - startX;
+                            currentY = e.clientY - startY;
+                            card.style.transform = `translate(${{currentX}}px, ${{currentY}}px)`;
+                        }});
+
+                        document.addEventListener('mouseup', () => {{ isDragging = false; }});
+
+                        const resizeObserver = new ResizeObserver(() => {{
+                            if (window.editorInstance) window.editorInstance.layout();
+                        }});
+                        resizeObserver.observe(card);
+                    }}
+
+                    if(window.editorInstance) {{
+                        document.getElementById("monaco-ready-btn").click();
+                        return;
+                    }}
+
+                    const initMonaco = () => {{
+                        require.config({{ paths: {{ 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }}}});
+                        require(['vs/editor/editor.main'], function() {{
+                            window.editorInstance = monaco.editor.create(document.getElementById('monaco-container'), {{
+                                value: '',
+                                language: 'plaintext',
+                                theme: 'vs-dark',
+                                automaticLayout: true,
+                                fontSize: 14,
+                                minimap: {{ enabled: false }},
+                                scrollBeyondLastLine: false,
+                                wordWrap: "on"
+                            }});
+
+                            window.editorInstance.onDidChangeModelContent(() => {{
+                                if(window.isSwitchingTab) return;
+                                const val = window.editorInstance.getValue();
+                                const hiddenArea = document.getElementById("hidden-editor-sync");
+                                if(hiddenArea) {{
+                                    hiddenArea.value = val;
+                                    hiddenArea.dispatchEvent(new Event("input"));
+                                }}
+                            }});
+
+                            document.getElementById("monaco-ready-btn").click();
+                        }});
+                    }};
+
+                    if (!window.require) {{
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js';
+                        script.onload = initMonaco;
+                        document.head.appendChild(script);
+                    }} else {{
+                        initMonaco();
+                    }}
+                }}, 150);
+            ''')
+
+    async def download_entry(entry):
+        remote_path = entry.get('path', '')
+        try:
+            data = await run.io_bound(download_remote_file, server_conf, remote_path)
+            ui.download(data, entry.get('name') or os.path.basename(remote_path) or 'download.bin')
+            safe_notify('开始下载文件', 'positive')
+        except Exception as e:
+            safe_notify(f'下载失败: {e}', 'negative')
+
+    async def confirm_delete_entry(entry):
+        target_name = entry.get('name', '未知目标')
+        target_path = entry.get('path', '')
+        target_type = '目录' if entry.get('is_dir') else '文件'
+        with ui.dialog() as d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-700'):
+            ui.label('删除确认').classes('text-lg font-bold text-red-400')
+            ui.label(f'确定删除{target_type} [{target_name}] 吗？').classes('text-sm text-slate-300')
+            ui.label('目录将递归删除，操作不可恢复。').classes('text-xs text-slate-500')
+
+            async def do_delete():
+                try:
+                    await run.io_bound(delete_remote_path, server_conf, target_path)
+                    safe_notify(f'{target_type}已删除', 'positive')
+                    d.close()
+                    parent = get_parent_remote_path(target_path)
+                    await ensure_tree_children(parent, force=True)
+                    await ensure_tree_children(file_state['current_path'], force=True)
+                    await refresh_remote_dir(file_state['current_path'])
+                except Exception as e:
+                    safe_notify(f'删除失败: {e}', 'negative')
+
+            with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                ui.button('取消', on_click=d.close).props('flat color=grey')
+                ui.button('删除', icon='delete', on_click=do_delete).classes('bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
+        d.open()
+
+    def open_create_dialog(kind):
+        label = '文件夹' if kind == 'dir' else '文件'
+        with ui.dialog() as d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-700'):
+            ui.label(f'新建{label}').classes('text-lg font-bold text-white')
+            name_input = ui.input('名称').classes('w-full').props('outlined dense dark bg-color="slate-800"')
+
+            async def create_target():
+                name = (name_input.value or '').strip()
+                if not name:
+                    safe_notify('名称不能为空', 'warning')
+                    return
+                target_path = join_remote_path(file_state['current_path'], name)
+                try:
+                    if kind == 'dir':
+                        await run.io_bound(make_remote_dir, server_conf, target_path)
+                        await ensure_tree_children(file_state['current_path'], force=True)
+                    else:
+                        await run.io_bound(create_empty_remote_file, server_conf, target_path)
+                    safe_notify(f'{label}创建成功', 'positive')
+                    d.close()
+                    await refresh_remote_dir(file_state['current_path'])
+                except Exception as e:
+                    safe_notify(f'创建失败: {e}', 'negative')
+
+            with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                ui.button('取消', on_click=d.close).props('flat color=grey')
+                ui.button('创建', icon='add', on_click=create_target).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
+        d.open()
+
+    async def handle_direct_upload(e):
+        try:
+            remote_path = join_remote_path(file_state['current_path'], e.name)
+            
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(e.content.read())
+                tmp_path = tmp.name
+            
+            await run.io_bound(upload_remote_file, server_conf, tmp_path, remote_path)
+            
+            os.remove(tmp_path)
+            safe_notify(f'✅ {e.name} 上传成功', 'positive')
+        except Exception as ex:
+            safe_notify(f'❌ 上传失败: {ex}', 'negative')
+        finally:
+            await refresh_remote_dir(file_state['current_path'])
+
+    def make_open_handler(entry):
+        async def handler(e=None):
+            await handle_entry_open(entry)
+        return handler
+
+    def make_edit_handler(entry):
+        async def handler(e=None):
+            await open_file_editor(entry)
+        return handler
+
+    def make_download_handler(entry):
+        async def handler(e=None):
+            await download_entry(entry)
+        return handler
+
+    def make_delete_handler(entry):
+        async def handler(e=None):
+            await confirm_delete_entry(entry)
+        return handler
+
+    @ui.refreshable
+    def render_tree():
+        def node(path, depth=0):
+            display_name = basename(path)
+            is_selected = tree_state['selected'] == path
+            is_expanded = path in tree_state['expanded']
+            children = tree_state['cache'].get(path, []) if is_expanded else []
+            loading = path in tree_state['loading']
+            
+            row_classes = 'w-full items-center gap-1 px-2 py-1 rounded-sm cursor-pointer transition-colors no-wrap '
+            row_classes += 'bg-[#1f2a44] border border-[#31415f]' if is_selected else 'hover:bg-[#182234]'
+
+            with ui.column().classes('w-full gap-0'):
+                with ui.row().classes(row_classes).style(f'padding-left: {5 + depth * 16}px'):
+                    ui.button(
+                        icon='expand_more' if is_expanded else 'chevron_right', 
+                        on_click=lambda _, p=path: toggle_tree_node(p)
+                    ).props('flat dense round size=xs color=grey').classes('!min-w-0 !p-0 opacity-80 shrink-0')
+                    
+                    ui.icon('folder_open' if is_expanded else 'folder').classes('text-amber-400 text-[16px] shrink-0')
+                    ui.label(display_name).classes('text-[13px] text-slate-200 cursor-pointer select-none truncate').on('click', lambda _, p=path: select_tree_node(p))
+                
+                if loading:
+                    ui.label('加载中...').classes('text-[11px] text-slate-500 ml-8 py-0.5')
+                if is_expanded:
+                    sorted_children = sorted(children, key=lambda x: x.get('name', '').lower())
+                    for child in sorted_children:
+                        node(child.get('path', '/'), depth + 1)
+
+        with ui.column().classes('w-full gap-0 p-1 bg-[#0f1724] h-full overflow-hidden flex-nowrap'):
+            node('/')
+
+    @ui.refreshable
+    def render_file_list():
+        entries = file_state.get('entries', [])
+        sorted_entries = sorted(entries, key=lambda x: (not x.get('is_dir'), x.get('name', '').lower()))
+
+        with ui.column().classes('w-full gap-0 bg-[#0d1524] h-full overflow-hidden flex-nowrap'):
+            
+            with ui.row().classes('w-full items-center px-2 py-1.5 text-[12px] text-slate-400 border-b border-slate-700 bg-[#131d2d] flex-nowrap no-wrap tracking-wider'):
+                ui.label('文件名').classes('w-[26%] border-r border-slate-700 pl-1 truncate')
+                ui.label('大小').classes('w-[12%] border-r border-slate-700 pl-1 truncate')
+                ui.label('类型').classes('w-[12%] border-r border-slate-700 pl-1 truncate')
+                ui.label('修改时间').classes('w-[20%] border-r border-slate-700 pl-1 truncate')
+                ui.label('权限').classes('w-[13%] border-r border-slate-700 pl-1 truncate')
+                ui.label('用户/用户组').classes('w-[17%] pl-1 truncate')
+
+            if file_state.get('loading'):
+                with ui.column().classes('w-full items-center justify-center py-10 text-slate-500'):
+                    ui.spinner('dots', size='2rem', color='primary')
+                    ui.label('正在读取远程目录...').classes('text-xs')
+                return
+
+            if not sorted_entries:
+                with ui.column().classes('w-full items-center justify-center py-10 text-slate-500'):
+                    ui.icon('folder_off').classes('text-2xl')
+                    ui.label('当前目录为空').classes('text-xs')
+                return
+
+            for index, item in enumerate(sorted_entries):
+                is_dir = item.get('is_dir', False)
+                row_classes = 'w-full items-center px-2 py-1.5 border-b border-[#182232] cursor-default transition-colors hover:bg-[#182234] flex-nowrap no-wrap'
+                
+                with ui.row().classes(row_classes) as row:
+                    
+                    with ui.context_menu().classes('bg-[#1e293b] text-slate-200 border border-slate-700 text-[13px] font-bold min-w-[120px]'):
+                        if is_dir:
+                            ui.menu_item('📂 打开 (Open)', on_click=make_open_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.separator().classes('bg-slate-600')
+                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
+                        else:
+                            ui.menu_item('📝 打开 / 编辑', on_click=make_edit_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('⬇️ 下载 (Download)', on_click=make_download_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.separator().classes('bg-slate-600')
+                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
+                    
+                    with ui.row().classes('w-[26%] items-center gap-1.5 min-w-0 flex-nowrap no-wrap pl-1'):
+                        icon_name = 'folder' if is_dir else 'description'
+                        icon_color = 'text-amber-400' if is_dir else 'text-cyan-400'
+                        ui.icon(icon_name).classes(f'{icon_color} text-[16px] shrink-0')
+                        ui.label(item.get('name', '')).classes('truncate text-[13px] text-slate-200')
+                    
+                    size_str = '' if is_dir else format_file_size(item.get('size', 0))
+                    ui.label(size_str).classes('w-[12%] text-xs text-slate-400 pl-1 truncate')
+                    
+                    type_str = '文件夹' if is_dir else '文件'
+                    ui.label(type_str).classes('w-[12%] text-xs text-slate-400 pl-1 truncate')
+                    
+                    ui.label(format_mtime(item.get('mtime', 0))).classes('w-[20%] text-xs text-slate-500 pl-1 truncate')
+                    
+                    ui.label(item.get('mode', '--')).classes('w-[13%] text-xs text-slate-400 font-mono pl-1 truncate')
+                    
+                    owner_str = item.get('owner', 'root/root')
+                    ui.label(owner_str).classes('w-[17%] text-xs text-slate-400 pl-1 truncate')
+                    
+                row.on('dblclick', make_open_handler(item))
+
     with content_container:
-        with ui.card().classes('w-full h-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
+        with ui.card().classes('w-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
             with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
                 with ui.row().classes('items-center gap-3'):
                     ui.icon('terminal').classes('text-green-400')
@@ -694,23 +1237,55 @@ async def render_single_ssh_view(server_conf):
                         ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-slate-100 font-bold')
                         ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
                 with ui.row().classes('items-center gap-2'):
-                    ui.button('返回详情', icon='arrow_back', on_click=lambda: asyncio.create_task(_back_to_detail())).props('outline color=grey').classes('text-slate-200')
+                    ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props('outline color=grey').classes('text-slate-200')
 
             with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
                 with ui.row().classes('items-center gap-2'):
                     ui.badge('独立路由终端', color='green').props('outline rounded')
                     ui.badge('交互模式', color='blue').props('outline rounded')
-                ui.label('右侧详情区已切换为 SSH 页面').classes('text-xs text-slate-400')
+                ui.label('SSH 终端与文件管理已分区显示').classes('text-xs text-slate-400')
 
-            terminal_box = ui.element('div').classes('w-full min-h-0 flex-grow bg-black overflow-hidden flex items-center justify-center')
+            terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style('height: 420px; min-height: 420px; position: relative;')
             with terminal_box:
-                ui.label('正在初始化 SSH 终端...').classes('text-slate-500 text-sm')
+                with ui.column().classes('w-full h-full items-center justify-center text-slate-500'):
+                    ui.label('正在初始化 SSH 终端...').classes('text-sm')
 
-            with ui.column().classes('w-full px-4 py-3 bg-slate-800 border-t border-slate-700 gap-2'):
-                render_quick_commands()
+        with ui.card().classes('w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
+            render_quick_commands()
+
+        with ui.card().classes('w-full h-[46vh] min-h-[420px] p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
+
+            with ui.row().classes('w-full items-center justify-between px-3 py-2 bg-[#131d2d] border-b border-slate-700 gap-2 flex-nowrap'):
+                path_input = ui.input(value=file_state['current_path']).classes('flex-grow text-xs h-8 min-w-[200px]').props('dense outlined dark bg-color="slate-900"')
+                
+                with ui.row().classes('items-center gap-1 flex-nowrap no-wrap'):
+                    ui.button('历史').props('outline dense size=sm color=grey').classes('h-7 text-slate-400 border-slate-600 hidden sm:block')
+                    ui.button(icon='refresh', on_click=lambda: refresh_remote_dir(file_state['current_path'])).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('刷新')
+                    ui.button(icon='arrow_upward', on_click=go_parent_dir).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('返回上级')
+                    
+                    hidden_uploader = ui.upload(on_upload=handle_direct_upload, multiple=True).props('auto-upload').style('display: none;')
+                    ui.button(
+                        icon='file_upload', 
+                        on_click=lambda: ui.run_javascript(f'document.getElementById("c{hidden_uploader.id}").querySelector("input[type=file]").click()')
+                    ).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('上传文件')
+
+                    ui.button(icon='create_new_folder', on_click=lambda: open_create_dialog('dir')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-green-400').tooltip('新建目录')
+                    ui.button(icon='note_add', on_click=lambda: open_create_dialog('file')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-blue-400').tooltip('新建文件')
+
+            with ui.row().classes('w-full min-h-0 flex-grow flex-nowrap no-wrap gap-0'):
+                with ui.column().classes('w-[25%] min-w-[150px] h-full border-r border-[#223048] bg-[#0f1724]'):
+                    with ui.scroll_area().classes('w-full h-full'):
+                        render_tree()
+                        
+                with ui.column().classes('w-[75%] h-full bg-[#0d1524]'):
+                    with ui.scroll_area().classes('w-full h-full'):
+                        render_file_list()
 
     logger.info(f"[SingleSSHRoute] page opened | key={server_key}")
-    asyncio.create_task(_start_terminal(terminal_box))
+    
+    ui.timer(0.05, lambda: _start_terminal(terminal_box), once=True)
+    ui.timer(0.05, lambda: ensure_tree_children('/'), once=True)
+    ui.timer(0.05, lambda: refresh_remote_dir('/'), once=True)
 
 
 async def render_single_server_view(server_conf, force_refresh=False):
@@ -1096,7 +1671,7 @@ PY'''
                         ui.badge('交互模式', color='blue').props('outline rounded')
                     ui.label('提示：若刚打开终端，请等待 1~2 秒完成连接').classes('text-xs text-slate-400')
 
-                terminal_box = ui.element('div').classes('w-full min-h-0 flex-grow bg-black overflow-hidden flex items-center justify-center')
+                terminal_box = ui.element('div').classes('w-full min-h-[240px] flex-grow bg-black overflow-hidden flex items-center justify-center')
                 with terminal_box:
                     ui.label('正在初始化 SSH 终端...').classes('text-slate-500 text-sm')
 
