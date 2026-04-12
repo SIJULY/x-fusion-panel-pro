@@ -1,4 +1,6 @@
 import asyncio
+import json
+import time
 import uuid
 
 from nicegui import run, ui
@@ -20,7 +22,7 @@ from app.services.cloudflare import CloudflareHandler
 from app.services.manager_factory import get_manager
 from app.services.probe import install_probe_on_server
 from app.services.server_ops import fast_resolve_single_server, generate_smart_name
-from app.services.ssh import WebSSH, _ssh_exec_wrapper
+from app.services.ssh import WebSSH, _ssh_exec_wrapper, get_ssh_client_sync
 from app.services.subscriptions import copy_group_link
 from app.services.xui_fetch import fetch_inbounds_safe
 from app.storage.repositories import save_admin_config, save_nodes_cache, save_servers
@@ -47,6 +49,11 @@ rm -rf /usr/local/etc/xray
 
 echo "Xray Service Uninstalled (Binary kept safe)"
 """
+
+
+SSH_DIALOG_STATES = {}
+SSH_PAGE_TERMINALS = {}
+SSH_DIALOG_OPEN_COOLDOWN = 1.2
 
 
 async def save_server_config(server_data, is_add=True, idx=None):
@@ -572,10 +579,144 @@ async def open_server_dialog(idx=None):
     d.open()
 
 
+
+
+def cleanup_ssh_route_terminal(server_key=None):
+    keys = [server_key] if server_key else list(SSH_PAGE_TERMINALS.keys())
+    for key in keys:
+        inst = SSH_PAGE_TERMINALS.pop(key, None)
+        try:
+            if inst:
+                inst.close()
+        except:
+            pass
+
+
+async def render_single_ssh_view(server_conf):
+    from app.ui.pages.content_router import content_container, refresh_content
+
+    server_key = server_conf.get('url') or server_conf.get('ssh_host') or str(id(server_conf))
+    cleanup_ssh_route_terminal(server_key)
+
+    current_client = None
+    try:
+        current_client = ui.context.client
+    except:
+        pass
+
+    if content_container:
+        content_container.clear()
+        content_container.classes(remove='overflow-y-auto block', add='h-full overflow-hidden flex flex-col p-4')
+
+    terminal_state = {'instance': None}
+
+    async def _start_terminal(terminal_box):
+        await asyncio.sleep(0.15)
+        try:
+            terminal_box.clear()
+        except:
+            pass
+        ssh = WebSSH(terminal_box, server_conf)
+        terminal_state['instance'] = ssh
+        SSH_PAGE_TERMINALS[server_key] = ssh
+        await ssh.connect()
+
+    async def _back_to_detail():
+        cleanup_ssh_route_terminal(server_key)
+        await refresh_content('SINGLE', server_conf, manual_client=current_client)
+
+    def exec_quick_cmd(cmd_text):
+        if terminal_state['instance'] and terminal_state['instance'].active:
+            terminal_state['instance'].channel.send(cmd_text + '\n')
+            safe_notify(f'已发送: {cmd_text[:20]}...', 'positive')
+        else:
+            safe_notify('SSH 正在连接，请稍后重试', 'warning')
+
+    def open_cmd_editor(existing_cmd=None):
+        with ui.dialog() as edit_d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-600 shadow-2xl'):
+            with ui.row().classes('w-full justify-between items-center mb-4'):
+                ui.label('管理快捷命令').classes('text-lg font-bold text-white')
+                ui.button(icon='close', on_click=edit_d.close).props('flat round dense color=grey')
+            name_input = ui.input('按钮名称', value=existing_cmd['name'] if existing_cmd else '').classes('w-full mb-3').props('outlined dense dark bg-color="slate-800"')
+            cmd_input = ui.textarea('执行命令', value=existing_cmd['cmd'] if existing_cmd else '').classes('w-full mb-4').props('outlined dense dark bg-color="slate-800" rows=4')
+
+            async def save():
+                name = name_input.value.strip()
+                cmd = cmd_input.value.strip()
+                if not name or not cmd:
+                    return ui.notify('内容不能为空', type='negative')
+                if 'quick_commands' not in ADMIN_CONFIG:
+                    ADMIN_CONFIG['quick_commands'] = []
+                if existing_cmd:
+                    existing_cmd['name'] = name
+                    existing_cmd['cmd'] = cmd
+                else:
+                    ADMIN_CONFIG['quick_commands'].append({'name': name, 'cmd': cmd, 'id': str(uuid.uuid4())[:8]})
+                await save_admin_config()
+                render_quick_commands.refresh()
+                edit_d.close()
+
+            async def delete_current():
+                if existing_cmd and 'quick_commands' in ADMIN_CONFIG:
+                    ADMIN_CONFIG['quick_commands'].remove(existing_cmd)
+                    await save_admin_config()
+                    render_quick_commands.refresh()
+                    edit_d.close()
+
+            with ui.row().classes('w-full justify-between items-center mt-2'):
+                if existing_cmd:
+                    ui.button('删除', icon='delete', on_click=delete_current).classes('bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
+                else:
+                    ui.element('div')
+                ui.button('保存', icon='save', on_click=save).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
+        edit_d.open()
+
+    @ui.refreshable
+    def render_quick_commands():
+        commands = ADMIN_CONFIG.get('quick_commands', [])
+        with ui.row().classes('w-full gap-2 items-center flex-wrap'):
+            ui.label('快捷命令').classes('text-xs font-bold text-slate-500 mr-2')
+            for cmd_obj in commands:
+                cmd_name = cmd_obj.get('name', '未命名')
+                cmd_text = cmd_obj.get('cmd', '')
+                with ui.element('div').classes('flex items-center bg-slate-700 rounded overflow-hidden border-b-2 border-slate-900 transition-all active:border-b-0 active:translate-y-[2px] hover:bg-slate-600'):
+                    ui.button(cmd_name, on_click=lambda c=cmd_text: exec_quick_cmd(c)).props('unelevated').classes('bg-transparent text-[11px] font-bold text-slate-300 px-3 py-1.5 hover:text-white rounded-none')
+                    ui.element('div').classes('w-[1px] h-4 bg-slate-500 opacity-50')
+                    ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props('flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
+            ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props('flat dense round size=sm color=green').tooltip('添加常用命令')
+
+    with content_container:
+        with ui.card().classes('w-full h-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
+            with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('terminal').classes('text-green-400')
+                    with ui.column().classes('gap-0'):
+                        ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-slate-100 font-bold')
+                        ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('返回详情', icon='arrow_back', on_click=lambda: asyncio.create_task(_back_to_detail())).props('outline color=grey').classes('text-slate-200')
+
+            with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.badge('独立路由终端', color='green').props('outline rounded')
+                    ui.badge('交互模式', color='blue').props('outline rounded')
+                ui.label('右侧详情区已切换为 SSH 页面').classes('text-xs text-slate-400')
+
+            terminal_box = ui.element('div').classes('w-full min-h-0 flex-grow bg-black overflow-hidden flex items-center justify-center')
+            with terminal_box:
+                ui.label('正在初始化 SSH 终端...').classes('text-slate-500 text-sm')
+
+            with ui.column().classes('w-full px-4 py-3 bg-slate-800 border-t border-slate-700 gap-2'):
+                render_quick_commands()
+
+    logger.info(f"[SingleSSHRoute] page opened | key={server_key}")
+    asyncio.create_task(_start_terminal(terminal_box))
+
+
 async def render_single_server_view(server_conf, force_refresh=False):
     global REFRESH_CURRENT_NODES
 
-    from app.ui.pages.content_router import content_container
+    from app.ui.pages.content_router import content_container, refresh_content
 
     if content_container:
         content_container.clear()
@@ -589,6 +730,383 @@ async def render_single_server_view(server_conf, force_refresh=False):
                 mgr = get_manager(server_conf)
             except:
                 pass
+
+        def to_float(value, default=0.0):
+            try:
+                return float(value)
+            except:
+                return default
+
+        def clamp_percent(value):
+            return max(0.0, min(100.0, to_float(value, 0.0)))
+
+        def fmt_gb(value):
+            if value in [None, '', '--']:
+                return '--'
+            return f"{to_float(value):.2f} GB"
+
+        def render_metric_row(label, value, sub_text=''):
+            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm'):
+                with ui.column().classes('gap-0 min-w-0 flex-1'):
+                    ui.label(label).classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500')
+                    if sub_text:
+                        ui.label(sub_text).classes('text-[10px] text-slate-400 mt-1 break-all')
+                ui.label(str(value)).classes('text-sm font-black text-slate-100 text-right shrink-0')
+
+        def render_section_header(title, icon, accent_class, desc='', right_renderer=None):
+            with ui.row().classes('w-full items-center justify-between px-4 py-3 rounded-xl border border-slate-700 bg-slate-800/80 shadow-sm min-h-[64px]'):
+                with ui.row().classes('items-center gap-3'):
+                    with ui.element('div').classes(f'w-10 h-10 rounded-xl flex items-center justify-center bg-slate-900 border border-slate-700 {accent_class}'):
+                        ui.icon(icon).classes('text-xl')
+                    with ui.column().classes('gap-0 justify-center'):
+                        ui.label(title).classes('text-base font-black text-slate-100 tracking-wide')
+                        if desc:
+                            ui.label(desc).classes('text-[11px] text-slate-400')
+                if right_renderer:
+                    right_renderer()
+
+        def get_os_visual(os_name):
+            name = str(os_name or '').lower()
+            if 'ubuntu' in name:
+                return 'https://cdn.simpleicons.org/ubuntu/E95420', 'Ubuntu'
+            if 'debian' in name:
+                return 'https://cdn.simpleicons.org/debian/A81D33', 'Debian'
+            if 'centos' in name:
+                return 'https://cdn.simpleicons.org/centos/8A2BE2', 'CentOS'
+            if 'red hat' in name:
+                return 'https://cdn.simpleicons.org/redhat/EE0000', 'RedHat'
+            if 'rocky' in name:
+                return 'https://cdn.simpleicons.org/rockylinux/10B981', 'RockyLinux'
+            if 'alma' in name:
+                return 'https://cdn.simpleicons.org/almalinux/2563EB', 'AlmaLinux'
+            if 'alpine' in name:
+                return 'https://cdn.simpleicons.org/alpinelinux/0EA5E9', 'Alpine'
+            if 'arch' in name:
+                return 'https://cdn.simpleicons.org/archlinux/1793D1', 'ArchLinux'
+            return 'https://cdn.simpleicons.org/linux/FCC624', 'Linux'
+
+        def render_percent_chip(percent):
+            pct = clamp_percent(percent)
+            ui.label(f'{pct:.0f}%').classes('text-base font-black text-slate-100 leading-none')
+
+        def format_arch_text(arch_value):
+            value = str(arch_value or '--').strip().lower()
+            if value in ['x86_64', 'amd64']:
+                return 'AMD64 / x86_64'
+            if value in ['aarch64', 'arm64']:
+                return 'ARM64 / AArch64'
+            if value.startswith('arm'):
+                return 'ARM'
+            if value in ['', '--']:
+                return '--'
+            return str(arch_value)
+
+        async def load_runtime_snapshot():
+            probe_cache = PROBE_DATA_CACHE.get(server_conf['url'], {}) or {}
+            static = probe_cache.get('static', {}) or {}
+            mem_total = to_float(probe_cache.get('mem_total', 0.0))
+            mem_used = round(mem_total * clamp_percent(probe_cache.get('mem_usage', 0.0)) / 100.0, 2)
+            swap_total = to_float(probe_cache.get('swap_total', 0.0))
+            swap_free = to_float(probe_cache.get('swap_free', 0.0))
+            disk_total = to_float(probe_cache.get('disk_total', 0.0))
+            disk_used = round(disk_total * clamp_percent(probe_cache.get('disk_usage', 0.0)) / 100.0, 2)
+            snapshot = {
+                'os': static.get('os') or '--',
+                'kernel': static.get('kernel') or probe_cache.get('kernel') or '--',
+                'arch': static.get('arch') or '--',
+                'virt': static.get('virt') or '--',
+                'uptime': probe_cache.get('uptime') or '--',
+                'mem_total_gb': mem_total,
+                'mem_free_gb': max(mem_total - mem_used, 0.0) if mem_total else 0.0,
+                'mem_used_gb': mem_used,
+                'mem_cache_gb': to_float(probe_cache.get('mem_cache_gb', 0.0)),
+                'mem_usage_pct': clamp_percent(probe_cache.get('mem_usage', 0.0)),
+                'swap_total_gb': swap_total,
+                'swap_free_gb': swap_free,
+                'swap_used_gb': max(swap_total - swap_free, 0.0),
+                'swap_usage_pct': clamp_percent((max(swap_total - swap_free, 0.0) / swap_total * 100.0) if swap_total else 0.0),
+                'disk_device': probe_cache.get('disk_device') or '/',
+                'disk_total_gb': disk_total,
+                'disk_free_gb': max(disk_total - disk_used, 0.0) if disk_total else 0.0,
+                'disk_used_gb': disk_used,
+                'disk_usage_pct': clamp_percent(probe_cache.get('disk_usage', 0.0)),
+                'last_updated': probe_cache.get('last_updated', 0),
+                'source': 'probe' if probe_cache else 'fallback',
+            }
+
+            if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
+                remote_script = r'''python3 - <<'PY'
+import json, os, platform
+
+def read_meminfo():
+    data = {}
+    try:
+        with open('/proc/meminfo') as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    data[parts[0].rstrip(':')] = int(parts[1])
+    except:
+        pass
+    return data
+
+info = {}
+try:
+    pretty = '--'
+    if os.path.exists('/etc/os-release'):
+        with open('/etc/os-release') as f:
+            for line in f:
+                if line.startswith('PRETTY_NAME='):
+                    pretty = line.split('=', 1)[1].strip().strip('"')
+                    break
+    mem = read_meminfo()
+    total = mem.get('MemTotal', 0) / 1024 / 1024
+    free = mem.get('MemFree', 0) / 1024 / 1024
+    available = mem.get('MemAvailable', 0) / 1024 / 1024
+    buffers = mem.get('Buffers', 0) / 1024 / 1024
+    cached = mem.get('Cached', 0) / 1024 / 1024
+    real_used = max(total - available, 0)
+    swap_total = mem.get('SwapTotal', 0) / 1024 / 1024
+    swap_free = mem.get('SwapFree', 0) / 1024 / 1024
+
+    st = os.statvfs('/')
+    disk_total = st.f_blocks * st.f_frsize / 1024 / 1024 / 1024
+    disk_free = st.f_bavail * st.f_frsize / 1024 / 1024 / 1024
+    disk_used = max(disk_total - disk_free, 0)
+    disk_device = '/'
+    try:
+        with open('/proc/mounts') as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == '/':
+                    disk_device = parts[0]
+                    break
+    except:
+        pass
+
+    uptime_text = '--'
+    try:
+        with open('/proc/uptime') as f:
+            u = float(f.read().split()[0])
+        d = int(u // 86400); h = int((u % 86400) // 3600); m = int((u % 3600) // 60)
+        uptime_text = f'{d}天 {h}时 {m}分'
+    except:
+        pass
+
+    info = {
+        'os': pretty,
+        'kernel': platform.release(),
+        'arch': platform.machine(),
+        'virt': 'Unknown',
+        'uptime': uptime_text,
+        'mem_total_gb': round(total, 2),
+        'mem_free_gb': round(free, 2),
+        'mem_used_gb': round(real_used, 2),
+        'mem_cache_gb': round(buffers + cached, 2),
+        'mem_usage_pct': round((real_used / total * 100.0), 1) if total else 0.0,
+        'swap_total_gb': round(swap_total, 2),
+        'swap_free_gb': round(swap_free, 2),
+        'swap_used_gb': round(max(swap_total - swap_free, 0), 2),
+        'swap_usage_pct': round((max(swap_total - swap_free, 0) / swap_total * 100.0), 1) if swap_total else 0.0,
+        'disk_device': disk_device,
+        'disk_total_gb': round(disk_total, 2),
+        'disk_free_gb': round(disk_free, 2),
+        'disk_used_gb': round(disk_used, 2),
+        'disk_usage_pct': round((disk_used / disk_total * 100.0), 1) if disk_total else 0.0,
+        'source': 'ssh',
+    }
+except Exception as e:
+    info = {'error': str(e)}
+print(json.dumps(info, ensure_ascii=False))
+PY'''
+
+                def _fetch_runtime_via_ssh():
+                    client, msg = get_ssh_client_sync(server_conf)
+                    if not client:
+                        return None
+                    try:
+                        stdin, stdout, stderr = client.exec_command(remote_script, timeout=20)
+                        raw = stdout.read().decode('utf-8', errors='ignore').strip()
+                        if raw:
+                            parsed = json.loads(raw.splitlines()[-1])
+                            if isinstance(parsed, dict) and not parsed.get('error'):
+                                return parsed
+                    except Exception as e:
+                        logger.warning(f'获取运行信息失败: {e}')
+                    finally:
+                        try:
+                            client.close()
+                        except:
+                            pass
+                    return None
+
+                remote_data = await run.io_bound(_fetch_runtime_via_ssh)
+                if isinstance(remote_data, dict):
+                    snapshot.update(remote_data)
+
+            return snapshot
+
+        runtime_snapshot = await load_runtime_snapshot()
+        server_dialog_key = server_conf.get('url') or server_conf.get('ssh_host') or str(id(server_conf))
+        ssh_dialog_state = SSH_DIALOG_STATES.setdefault(server_dialog_key, {'opening': False, 'dialog': None, 'last_open_at': 0.0})
+
+        def open_ssh_page():
+            if not server_conf.get('ssh_host'):
+                safe_notify('当前服务器未配置 SSH 主机，无法打开终端', 'warning')
+                return
+            try:
+                client = ui.context.client
+            except:
+                client = None
+            logger.info(f"[SingleSSHRoute] navigate requested | key={server_dialog_key} client_present={client is not None}")
+            asyncio.create_task(refresh_content('SSH_SINGLE', server_conf, manual_client=client))
+
+        def open_ssh_dialog():
+            if not server_conf.get('ssh_host'):
+                safe_notify('当前服务器未配置 SSH 主机，无法打开终端', 'warning')
+                return
+
+            now_ts = time.monotonic()
+            last_open_at = ssh_dialog_state.get('last_open_at', 0.0)
+            if now_ts - last_open_at < SSH_DIALOG_OPEN_COOLDOWN:
+                logger.info(f"[SingleSSH] ignore duplicate open within cooldown | key={server_dialog_key} delta={now_ts - last_open_at:.3f}")
+                return
+
+            try:
+                if ssh_dialog_state.get('dialog') and ssh_dialog_state['dialog'].visible:
+                    logger.info(f"[SingleSSH] ignore open because dialog already visible | key={server_dialog_key}")
+                    return
+            except:
+                ssh_dialog_state['dialog'] = None
+
+            if ssh_dialog_state.get('opening'):
+                logger.info(f"[SingleSSH] ignore open because dialog is opening | key={server_dialog_key}")
+                return
+
+            ssh_dialog_state['last_open_at'] = now_ts
+            ssh_dialog_state['opening'] = True
+            logger.info(f"[SingleSSH] open_ssh_dialog accepted | key={server_dialog_key}")
+
+            terminal_state = {'instance': None}
+
+
+            @ui.refreshable
+            def render_quick_commands():
+                commands = ADMIN_CONFIG.get('quick_commands', [])
+                with ui.row().classes('w-full gap-2 items-center flex-wrap'):
+                    ui.label('快捷命令').classes('text-xs font-bold text-slate-500 mr-2')
+                    for cmd_obj in commands:
+                        cmd_name = cmd_obj.get('name', '未命名')
+                        cmd_text = cmd_obj.get('cmd', '')
+                        with ui.element('div').classes('flex items-center bg-slate-700 rounded overflow-hidden border-b-2 border-slate-900 transition-all active:border-b-0 active:translate-y-[2px] hover:bg-slate-600'):
+                            ui.button(cmd_name, on_click=lambda c=cmd_text: exec_quick_cmd(c)).props('unelevated').classes('bg-transparent text-[11px] font-bold text-slate-300 px-3 py-1.5 hover:text-white rounded-none')
+                            ui.element('div').classes('w-[1px] h-4 bg-slate-500 opacity-50')
+                            ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props('flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
+                    ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props('flat dense round size=sm color=green').tooltip('添加常用命令')
+
+            def exec_quick_cmd(cmd_text):
+                if terminal_state['instance'] and terminal_state['instance'].active:
+                    terminal_state['instance'].channel.send(cmd_text + '\n')
+                    safe_notify(f'已发送: {cmd_text[:20]}...', 'positive')
+                else:
+                    safe_notify('SSH 正在连接，请稍后重试', 'warning')
+
+            def open_cmd_editor(existing_cmd=None):
+                with ui.dialog() as edit_d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-600 shadow-2xl'):
+                    with ui.row().classes('w-full justify-between items-center mb-4'):
+                        ui.label('管理快捷命令').classes('text-lg font-bold text-white')
+                        ui.button(icon='close', on_click=edit_d.close).props('flat round dense color=grey')
+                    name_input = ui.input('按钮名称', value=existing_cmd['name'] if existing_cmd else '').classes('w-full mb-3').props('outlined dense dark bg-color="slate-800"')
+                    cmd_input = ui.textarea('执行命令', value=existing_cmd['cmd'] if existing_cmd else '').classes('w-full mb-4').props('outlined dense dark bg-color="slate-800" rows=4')
+
+                    async def save():
+                        name = name_input.value.strip()
+                        cmd = cmd_input.value.strip()
+                        if not name or not cmd:
+                            return ui.notify('内容不能为空', type='negative')
+                        if 'quick_commands' not in ADMIN_CONFIG:
+                            ADMIN_CONFIG['quick_commands'] = []
+                        if existing_cmd:
+                            existing_cmd['name'] = name
+                            existing_cmd['cmd'] = cmd
+                        else:
+                            ADMIN_CONFIG['quick_commands'].append({'name': name, 'cmd': cmd, 'id': str(uuid.uuid4())[:8]})
+                        await save_admin_config()
+                        edit_d.close()
+                        render_quick_commands.refresh()
+                        ui.notify('命令已保存', type='positive')
+
+                    async def delete_current():
+                        if existing_cmd and 'quick_commands' in ADMIN_CONFIG:
+                            ADMIN_CONFIG['quick_commands'].remove(existing_cmd)
+                            await save_admin_config()
+                            edit_d.close()
+                            render_quick_commands.refresh()
+                            ui.notify('命令已删除', type='positive')
+
+                    with ui.row().classes('w-full justify-between mt-2'):
+                        if existing_cmd:
+                            ui.button('删除', icon='delete', color='red', on_click=delete_current).props('flat dense')
+                        else:
+                            ui.element('div')
+                        ui.button('保存', icon='save', on_click=save).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
+                edit_d.open()
+
+            terminal_box = None
+            ssh_dialog = None
+
+            async def _start_terminal():
+                await asyncio.sleep(0.15)
+                try:
+                    if terminal_box:
+                        terminal_box.clear()
+                except:
+                    pass
+                ssh = WebSSH(terminal_box, server_conf)
+                terminal_state['instance'] = ssh
+                await ssh.connect()
+
+            async def _cleanup():
+                try:
+                    if terminal_state['instance']:
+                        terminal_state['instance'].close()
+                except:
+                    pass
+                ssh_dialog_state['opening'] = False
+                ssh_dialog_state['dialog'] = None
+                logger.info(f"[SingleSSH] dialog cleaned up | key={server_dialog_key}")
+
+            async def _close_dialog():
+                await _cleanup()
+                if ssh_dialog:
+                    ssh_dialog.close()
+
+            with ui.dialog().props('persistent') as ssh_dialog, ui.card().classes('w-full max-w-6xl h-[85vh] flex flex-col p-0 overflow-hidden bg-slate-900 border border-slate-700 shadow-2xl'):
+                with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
+                    with ui.row().classes('items-center gap-3'):
+                        ui.icon('terminal').classes('text-green-400')
+                        with ui.column().classes('gap-0'):
+                            ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-slate-100 font-bold')
+                            ui.label('实时交互终端，支持快捷命令和连续输入').classes('text-xs text-slate-500')
+                    ui.button(icon='close', on_click=lambda: asyncio.create_task(_close_dialog())).props('flat round dense color=grey')
+
+                with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.badge('已自动连接', color='green').props('outline rounded')
+                        ui.badge('交互模式', color='blue').props('outline rounded')
+                    ui.label('提示：若刚打开终端，请等待 1~2 秒完成连接').classes('text-xs text-slate-400')
+
+                terminal_box = ui.element('div').classes('w-full min-h-0 flex-grow bg-black overflow-hidden flex items-center justify-center')
+                with terminal_box:
+                    ui.label('正在初始化 SSH 终端...').classes('text-slate-500 text-sm')
+
+                with ui.column().classes('w-full px-4 py-3 bg-slate-800 border-t border-slate-700 gap-2'):
+                    render_quick_commands()
+
+            ssh_dialog_state['dialog'] = ssh_dialog
+            logger.info(f"[SingleSSH] dialog opened | key={server_dialog_key}")
+            ssh_dialog.open()
+            asyncio.create_task(_start_terminal())
 
         @ui.refreshable
         async def render_node_list():
@@ -756,13 +1274,15 @@ async def render_single_server_view(server_conf, force_refresh=False):
         with ui.row().classes('w-full justify-between items-center bg-[#1e293b] p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm flex-shrink-0'):
             with ui.row().classes('items-center gap-4'):
                 sys_icon = 'computer' if 'Oracle' in server_conf.get('name', '') else 'dns'
-                with ui.element('div').classes('p-3 bg-[#0f172a] rounded-lg border border-slate-600'):
+                with ui.element('div').classes('p-3 bg-[#0f172a] rounded-lg border border-slate-600 shadow-inner'):
                     ui.icon(sys_icon, size='md').classes('text-blue-400')
                 with ui.column().classes('gap-1'):
-                    ui.label(server_conf.get('name', '未命名服务器')).classes('text-xl font-black text-slate-200 leading-tight tracking-tight')
-                    with ui.row().classes('items-center gap-2'):
-                        ip_addr = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').split(':')[0]
+                    with ui.row().classes('items-center gap-3 no-wrap'):
+                        ui.label(server_conf.get('name', '未命名服务器')).classes('text-xl font-black text-slate-200 leading-tight tracking-tight')
+                    with ui.row().classes('items-center gap-2 flex-wrap'):
+                        ip_addr = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
                         ui.label(ip_addr).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
+                        ui.label(runtime_snapshot.get('os', '--')).classes('text-xs text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700')
 
                         @ui.refreshable
                         def live_status_badge():
@@ -782,149 +1302,81 @@ async def render_single_server_view(server_conf, force_refresh=False):
                         live_status_badge()
                         ui.timer(3.0, live_status_badge.refresh)
 
-            with ui.row().classes('gap-3'):
-                from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
-
-                ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                if has_manager_access:
-                    async def on_add_success():
-                        ui.notify('添加节点成功')
-                        await reload_and_refresh_ui()
-                    ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
-                else:
-                    ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
+            with ui.row().classes('items-center justify-end'):
+                if server_conf.get('ssh_host'):
+                    ui.button(icon='terminal', on_click=open_ssh_page).props('flat round size=lg color=green').classes('bg-[#0f172a] border border-slate-700 shadow-md').tooltip('打开 SSH 页面')
 
         ui.element('div').classes('h-4 flex-shrink-0')
 
-        with ui.card().classes('w-full flex-grow flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
-            with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700'):
-                ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
-                if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
-                    ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
-                elif server_conf.get('user'):
-                    ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
+        with ui.card().classes('w-full flex-shrink-0 p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
+            with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#0f172a]'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.icon('monitor_heart').classes('text-cyan-400')
+                    ui.label('VPS 运行信息').classes('text-sm font-black text-slate-300 uppercase tracking-wide')
+                source_text = 'SSH 实时采集' if runtime_snapshot.get('source') == 'ssh' else '探针缓存 / 回退数据'
+                ui.label(source_text).classes('text-xs text-slate-500')
+
+            with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
+                with ui.grid().classes('w-full grid-cols-1 xl:grid-cols-2 gap-4 items-stretch'):
+                    with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                        os_logo_url, os_logo_name = get_os_visual(runtime_snapshot.get('os', '--'))
+                        render_section_header('系统信息', 'developer_board', 'text-blue-400', '操作系统 / 内核 / 架构 / 在线时间')
+                        with ui.column().classes('w-full flex-1 items-center justify-center gap-2 py-2 px-3 rounded-2xl bg-slate-800/40 border border-slate-700 min-h-[88px]'):
+                            ui.image(os_logo_url).classes('w-9 h-9 object-contain')
+                            ui.label(runtime_snapshot.get('os', '--')).classes('text-base font-black text-slate-50 text-center break-all max-w-full')
+                        with ui.column().classes('w-full gap-3 flex-1 justify-center'):
+                            render_metric_row('处理器架构', format_arch_text(runtime_snapshot.get('arch', '--')))
+                            render_metric_row('系统内核', runtime_snapshot.get('kernel', '--'))
+                            render_metric_row('在线运行时间', runtime_snapshot.get('uptime', '--'))
+
+                    with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                        render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"已用内存：{clamp_percent(runtime_snapshot.get('mem_usage_pct', 0)):.0f}%").classes('text-sm font-black text-slate-100'))
+                        with ui.column().classes('w-full flex-1 gap-3 justify-center'):
+                            render_metric_row('系统总内存', fmt_gb(runtime_snapshot.get('mem_total_gb')))
+                            render_metric_row('空闲内存', fmt_gb(runtime_snapshot.get('mem_free_gb')))
+                            render_metric_row('真实使用内存', fmt_gb(runtime_snapshot.get('mem_used_gb')))
+                            render_metric_row('系统缓存', fmt_gb(runtime_snapshot.get('mem_cache_gb')))
+                            render_metric_row('SWAP 虚拟内存', f"{fmt_gb(runtime_snapshot.get('swap_used_gb'))} / {fmt_gb(runtime_snapshot.get('swap_total_gb'))}", f"剩余 {fmt_gb(runtime_snapshot.get('swap_free_gb'))} · 使用率 {clamp_percent(runtime_snapshot.get('swap_usage_pct', 0)):.0f}%")
+
+                with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                    render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率')
+                    with ui.grid().classes('w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3'):
+                        render_metric_row('磁盘设备', runtime_snapshot.get('disk_device', '/'))
+                        render_metric_row('总容量', fmt_gb(runtime_snapshot.get('disk_total_gb')))
+                        render_metric_row('空闲剩余', fmt_gb(runtime_snapshot.get('disk_free_gb')))
+                        render_metric_row('已用容量', f"{fmt_gb(runtime_snapshot.get('disk_used_gb'))} ({clamp_percent(runtime_snapshot.get('disk_usage_pct', 0)):.0f}%)")
+
+        ui.element('div').classes('h-6 flex-shrink-0')
+
+        with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
+            with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
+                    if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
+                        ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
+                    elif server_conf.get('user'):
+                        ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
+                with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
+                    from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
+
+                    ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    if has_manager_access:
+                        async def on_add_success():
+                            ui.notify('添加节点成功')
+                            await reload_and_refresh_ui()
+                        ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
+                    else:
+                        ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
             with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
                 ui.label('节点名称').classes('text-left pl-2')
                 for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
                     ui.label(h).classes('text-center')
 
-            with ui.scroll_area().classes('w-full flex-grow bg-[#0f172a] p-1'):
+            with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
                 await render_node_list()
-
-        ui.element('div').classes('h-6 flex-shrink-0')
-
-        with ui.card().classes('w-full h-[750px] min-h-0 flex-shrink-0 p-0 rounded-xl border border-gray-300 border-b-[4px] border-b-gray-400 shadow-lg overflow-hidden bg-slate-900 flex flex-col'):
-            ssh_state = {'active': False, 'instance': None}
-
-            def render_ssh_area():
-                with ui.row().classes('w-full h-10 bg-slate-800 items-center justify-between px-4 flex-shrink-0 border-b border-slate-700'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.icon('terminal').classes('text-white text-sm')
-                        ui.label(f"SSH Console: {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-gray-300 text-xs font-mono font-bold')
-                    if ssh_state['active']:
-                        ui.button(icon='link_off', on_click=stop_ssh).props('flat dense round color=red size=sm').tooltip('断开连接')
-                    else:
-                        ui.label('Disconnected').classes('text-[10px] text-gray-500')
-
-                box_cls = 'w-full min-h-0 flex-grow bg-[#0f0f0f] overflow-hidden'
-                if not ssh_state['active']:
-                    box_cls += ' flex justify-center items-center'
-                else:
-                    box_cls += ' relative block'
-
-                terminal_box = ui.element('div').classes(box_cls)
-                with terminal_box:
-                    if not ssh_state['active']:
-                        with ui.column().classes('items-center gap-4'):
-                            ui.icon('dns', size='4rem').classes('text-gray-800')
-                            ui.label('安全终端已就绪').classes('text-gray-600 text-sm font-bold')
-                            ui.button('立即连接 SSH', icon='login', on_click=start_ssh).classes('bg-blue-600 text-white font-bold px-6 py-2 rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px] transition-all')
-                    else:
-                        ssh = WebSSH(terminal_box, server_conf)
-                        ssh_state['instance'] = ssh
-                        ui.timer(0.1, lambda: asyncio.create_task(ssh.connect()), once=True)
-
-                with ui.row().classes('w-full min-h-[60px] bg-slate-800 border-t border-slate-700 px-4 py-4 gap-3 items-center flex-wrap'):
-                    ui.label('快捷命令:').classes('text-xs font-bold text-gray-400 mr-2')
-                    commands = ADMIN_CONFIG.get('quick_commands', [])
-                    for cmd_obj in commands:
-                        cmd_name = cmd_obj.get('name', '未命名')
-                        cmd_text = cmd_obj.get('cmd', '')
-                        with ui.element('div').classes('flex items-center bg-slate-700 rounded overflow-hidden border-b-2 border-slate-900 transition-all active:border-b-0 active:translate-y-[2px] hover:bg-slate-600'):
-                            ui.button(cmd_name, on_click=lambda c=cmd_text: exec_quick_cmd(c)).props('unelevated').classes('bg-transparent text-[11px] font-bold text-slate-300 px-3 py-1.5 hover:text-white rounded-none')
-                            ui.element('div').classes('w-[1px] h-4 bg-slate-500 opacity-50')
-                            ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props('flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
-                    ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props('flat dense round size=sm color=green').tooltip('添加常用命令')
-
-            async def start_ssh():
-                ssh_state['active'] = True
-                render_card_content()
-
-            async def stop_ssh():
-                if ssh_state['instance']:
-                    ssh_state['instance'].close()
-                    ssh_state['instance'] = None
-                ssh_state['active'] = False
-                render_card_content()
-
-            def exec_quick_cmd(cmd_text):
-                if ssh_state['instance'] and ssh_state['instance'].active:
-                    ssh_state['instance'].channel.send(cmd_text + '\n')
-                    ui.notify(f"已发送: {cmd_text[:20]}...", type='positive', position='bottom')
-                else:
-                    ui.notify('请先连接 SSH', type='warning', position='bottom')
-
-            def open_cmd_editor(existing_cmd=None):
-                with ui.dialog() as d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-600 shadow-2xl'):
-                    with ui.row().classes('w-full justify-between items-center mb-4'):
-                        ui.label('管理快捷命令').classes('text-lg font-bold text-white')
-                        ui.button(icon='close', on_click=d.close).props('flat round dense color=grey')
-                    name_input = ui.input('按钮名称', value=existing_cmd['name'] if existing_cmd else '').classes('w-full mb-3').props('outlined dense dark bg-color="slate-800"')
-                    cmd_input = ui.textarea('执行命令', value=existing_cmd['cmd'] if existing_cmd else '').classes('w-full mb-4').props('outlined dense dark bg-color="slate-800" rows=4')
-
-                    async def save():
-                        name = name_input.value.strip()
-                        cmd = cmd_input.value.strip()
-                        if not name or not cmd:
-                            return ui.notify('内容不能为空', type='negative')
-                        if 'quick_commands' not in ADMIN_CONFIG:
-                            ADMIN_CONFIG['quick_commands'] = []
-                        if existing_cmd:
-                            existing_cmd['name'] = name
-                            existing_cmd['cmd'] = cmd
-                        else:
-                            ADMIN_CONFIG['quick_commands'].append({'name': name, 'cmd': cmd, 'id': str(uuid.uuid4())[:8]})
-                        await save_admin_config()
-                        d.close()
-                        render_card_content()
-                        ui.notify('命令已保存', type='positive')
-
-                    async def delete_current():
-                        if existing_cmd and 'quick_commands' in ADMIN_CONFIG:
-                            ADMIN_CONFIG['quick_commands'].remove(existing_cmd)
-                            await save_admin_config()
-                            d.close()
-                            render_card_content()
-                            ui.notify('命令已删除', type='positive')
-
-                    with ui.row().classes('w-full justify-between mt-2'):
-                        if existing_cmd:
-                            ui.button('删除', icon='delete', color='red', on_click=delete_current).props('flat dense')
-                        else:
-                            ui.element('div')
-                        ui.button('保存', icon='save', on_click=save).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
-                d.open()
-
-            def render_card_content():
-                ssh_wrapper.clear()
-                with ssh_wrapper:
-                    render_ssh_area()
-
-            ssh_wrapper = ui.column().classes('w-full h-full p-0 gap-0')
-            render_card_content()
 
         if has_manager_access and not NODES_DATA.get(server_conf['url']):
             ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
