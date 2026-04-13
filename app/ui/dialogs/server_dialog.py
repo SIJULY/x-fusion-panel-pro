@@ -1375,12 +1375,10 @@ async def render_single_ssh_view(server_conf):
                     with ui.row().classes('items-center gap-3'):
                         ui.icon('terminal').classes('text-green-400')
                         with ui.column().classes('gap-0'):
-                            # ----- SSH Terminal 标题：如果是域名，在这里动态解析为真实 IP -----
                             raw_host = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
                             display_ip = raw_host
                             if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
                                 try:
-                                    # SSH页面加载时同步等待一次 DNS 解析，让界面立刻显示 IP
                                     display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
                                 except:
                                     display_ip = raw_host
@@ -1495,24 +1493,23 @@ async def render_single_server_view(server_conf, force_refresh=False):
             def get_os_visual(os_name):
                 name = str(os_name or '').lower()
                 if 'ubuntu' in name:
-                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23E95420"%3E%3Cpath d="M11.983 0a11.97 11.97 0 00-8.91 3.593A11.96 11.96 0 00.046 11.03a2.6 2.6 0 001.077 2.378c.058.04.116.082.176.12a2.613 2.613 0 002.394.025 2.627 2.627 0 001.371-1.636 5.865 5.865 0 010.155-2.906A5.85 5.85 0 0116.593 17.5a2.637 2.637 0 00.584 1.956 2.61 2.61 0 001.996.883c.123 0 .248-.01.372-.033a2.615 2.615 0 002.046-1.464A11.953 11.953 0 0023.954 11.3a11.964 11.964 0 00-2.883-8.3A11.975 11.975 0 0011.983 0zm-5.46 7.608a2.536 2.536 0 00-1.748.742 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.536 2.536 0 00-1.776-.73zm11.01 4.39a2.536 2.536 0 00-1.748.743 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.535 2.535 0 00-1.776-.73zM6.524 16.4a2.537 2.537 0 00-1.748.742 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.536 2.536 0 00-1.776-.73z"/%3E%3C/svg%3E', 'Ubuntu'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo-ubuntu_cof-orange-hex.svg', 'Ubuntu'
                 if 'debian' in name:
-                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23A81D33"%3E%3Cpath d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm6.541 16.467c-.213.626-.525 1.252-1.01 1.737-.485.485-1.111.798-1.737 1.01-.626.212-1.313.313-2.02.313-.707 0-1.394-.101-2.02-.313-.626-.212-1.252-.525-1.737-1.01-.485-.485-.798-1.111-1.01-1.737-.212-.626-.313-1.313-.313-2.02 0-.707.101-1.394.313-2.02.212-.626.525-1.252 1.01-1.737.485-.485 1.111-.798 1.737-1.01.626-.212 1.313-.313 2.02-.313.707 0 1.394.101 2.02.313.626.212 1.252.525 1.737 1.01.485.485.798 1.111 1.01 1.737.212.626.313 1.313.313 2.02 0 .707-.101 1.394-.313 2.02zM14.875 11.943c-.161-.242-.363-.464-.585-.646-.222-.182-.474-.323-.747-.424-.273-.101-.565-.151-.868-.151-.303 0-.595.05-.868.151-.273.101-.525.242-.747.424-.222.182-.424.404-.585.646-.161.242-.283.515-.363.808-.081.293-.121.606-.121.929 0 .323.04.636.121.929.081.293.202.565.363.808.161.242.363.464.585.646.222.182.474.323.747.424.273.101-.565.151-.868.151-.303 0-.595-.05-.868-.151-.273-.101-.525-.242-.747-.424-.222-.182-.424-.404-.585-.646-.161-.242-.283-.515-.363-.808-.081-.293-.121-.606-.121-.929 0-.323-.04-.636-.121-.929-.081-.293-.202-.565-.363-.808z"/%3E%3C/svg%3E', 'Debian'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/6/66/Openlogo-debianV2.svg', 'Debian'
                 if 'centos' in name:
-                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23262577"%3E%3Cpath d="M22.58 9.389a.56.56 0 00-.462-.166l-4.046.818a1.628 1.628 0 00-1.129 1.127l-.818 4.045a.56.56 0 00.165.463l2.94 2.94c.262.263.742.257 1.014-.014l4.117-4.116c.27-.271.276-.752.014-1.014zm-13.25 8.99l-.817 4.045a.56.56 0 00.165.463l2.939 2.94c.263.263.742.257 1.014-.014l4.117-4.116c.271-.271.277-.752.014-1.014l-2.94-2.939a.56.56 0 00-.462-.165l-4.032.805zm-7.912-3.76l.818-4.045a.56.56 0 00-.166-.463l-2.94-2.939c-.262-.264-.742-.258-1.014.014l-4.117 4.116c-.270.271-.276.752-.014 1.1014l2.94 2.94c.12.12.298.168.462.165l4.032-.805zm13.251-8.99l.817-4.045a.56.56 0 00-.165-.463L12.463.142c-.263-.263-.742-.257-1.014.014l-4.117 4.116c-.271.275-.276.751-.014 1.014l2.94 2.94a.56.56 0 00.462.165l4.032-.805z"/%3E%3C/svg%3E', 'CentOS'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/9/9e/CentOS_Icon.svg', 'CentOS'
                 if 'red hat' in name:
-                    return 'https://cdn.simpleicons.org/redhat/EE0000', 'RedHat'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/d/d8/Red_Hat_logo.svg', 'RedHat'
                 if 'rocky' in name:
-                    return 'https://cdn.simpleicons.org/rockylinux/10B981', 'RockyLinux'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/1/11/Rocky_Linux_logo.svg', 'RockyLinux'
                 if 'alma' in name:
-                    return 'https://cdn.simpleicons.org/almalinux/2563EB', 'AlmaLinux'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/0/07/AlmaLinux_logo.svg', 'AlmaLinux'
                 if 'alpine' in name:
-                    return 'https://cdn.simpleicons.org/alpinelinux/0EA5E9', 'Alpine'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/1/18/Alpine_Linux_logo.svg', 'Alpine'
                 if 'arch' in name:
-                    return 'https://cdn.simpleicons.org/archlinux/1793D1', 'ArchLinux'
+                    return 'https://upload.wikimedia.org/wikipedia/commons/a/a5/Archlinux-icon-crystal-64.svg', 'ArchLinux'
                 
-                # 通用 Linux (小企鹅 Tux)
-                return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FCC624"%3E%3Cpath d="M11.8 11C9.53 11 7.7 12.62 7.7 14.62c-1.42-.04-2.73.28-3.41 1.15-.76.94-.51 2.51.48 3.45 1.12 1.06 3.14 1.33 4.91 1.2-.2.04-.4.09-.62.14-1.55.38-1.64 1.86-1.63 2.61.01.77.65 1.36 1.45 1.14l2.68-.55a5.4 5.4 0 0 0 4.5-2.25c.5-.8.8-1.66.84-2.59.12-.11.23-.25.32-.39.94-1.36 1.26-3.34.56-4.39-.87-1.31-2.84-1.26-4.51-1.09.01-1.98-1.81-3.63-4.06-3.63zm4 .92a1.46 1.46 0 0 1 1.45 1.47 1.46 1.46 0 0 1-1.45 1.47 1.46 1.46 0 0 1-1.45-1.47 1.46 1.46 0 0 1 1.45-1.47z"/%3E%3C/svg%3E', 'Linux'
+                return 'https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg', 'Linux'
 
             def format_arch_text(arch_value):
                 value = str(arch_value or '--').strip().lower()
@@ -1817,7 +1814,6 @@ PY'''
                             display_ip = raw_host
                             if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
                                 try:
-                                    # SSH页面加载时同步等待一次 DNS 解析，让界面立刻显示 IP
                                     display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
                                 except:
                                     display_ip = raw_host
@@ -1865,109 +1861,112 @@ PY'''
                             ui.label('⚪ 等待探针数据').classes('text-xs text-slate-500 font-bold')
                     render_sync_status()
 
-                @ui.refreshable
-                def render_vps_info_cards():
-                    snapshot = get_cached_snapshot()
-                    with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
-                        with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
+                with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
+                    with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
+                        
+                        # --- 系统信息 ---
+                        with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                            snapshot_init = get_cached_snapshot()
+                            os_logo_url, _ = get_os_visual(snapshot_init['os'])
                             
-                            with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                                os_logo_url, _ = get_os_visual(snapshot['os'])
-                                
-                                cores = snapshot.get('cpu_cores')
-                                core_label = f"{cores} C" if cores else ""
-                                
-                                render_section_header(
-                                    '系统信息', 
-                                    'developer_board', 
-                                    'text-blue-400', 
-                                    '操作系统 / 架构 / 在线时间',
-                                    right_renderer=(lambda: ui.label(core_label).classes('text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md border border-blue-400/20')) if core_label else None
-                                )
-                                
-                                with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm transition-all hover:bg-slate-800/60 flex-nowrap'):
-                                    ui.image(os_logo_url).classes('w-6 h-6 object-contain shrink-0')
-                                    ui.label(snapshot['os']).classes('text-sm font-black text-slate-50 truncate')
-                                
-                                with ui.column().classes('w-full gap-3 flex-1 justify-center mt-1'):
-                                    
+                            cores = snapshot_init.get('cpu_cores')
+                            core_label = f"{cores} C" if cores else ""
+                            
+                            render_section_header(
+                                '系统信息', 
+                                'developer_board', 
+                                'text-blue-400', 
+                                '操作系统 / 架构 / 在线时间',
+                                right_renderer=(lambda: ui.label(core_label).classes('text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md border border-blue-400/20')) if core_label else None
+                            )
+                            
+                            with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm transition-all hover:bg-slate-800/60 flex-nowrap'):
+                                ui.element('img').props(f'src="{os_logo_url}"').classes('w-6 h-6 object-contain shrink-0')
+                                ui.label(snapshot_init['os']).classes('text-sm font-black text-slate-50 truncate')
+                            
+                            with ui.column().classes('w-full gap-3 flex-1 justify-center mt-1'):
+                                @ui.refreshable
+                                def render_sys_dyn():
+                                    snap = get_cached_snapshot()
                                     with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
                                         ui.label('CPU 使用率').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
                                         
-                                        pct = snapshot.get('cpu_usage_pct', 0.0)
+                                        pct = snap.get('cpu_usage_pct', 0.0)
                                         bar_color = 'bg-emerald-500/80' if pct < 60 else ('bg-amber-500/80' if pct < 85 else 'bg-red-500/80')
                                         
                                         with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
                                             ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
                                             ui.label(f'{pct:.1f}%').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
-                                    render_metric_row('处理器架构', format_arch_text(snapshot.get('arch')), value_color='text-cyan-400')
-                                    render_metric_row('在线运行时间', snapshot.get('uptime', '--'), value_color='text-emerald-400')
+                                    render_metric_row('处理器架构', format_arch_text(snap.get('arch')), value_color='text-cyan-400')
+                                    render_metric_row('在线运行时间', snap.get('uptime', '--'), value_color='text-emerald-400')
+                                render_sys_dyn()
 
-                            with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                                render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"{fmt_gb(snapshot['mem_total_gb'])}").classes('text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20'))
+                        # --- 内存信息 ---
+                        with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                            @ui.refreshable
+                            def render_mem_card():
+                                snap = get_cached_snapshot()
+                                render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"{fmt_gb(snap['mem_total_gb'])}").classes('text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20'))
                                 with ui.column().classes('w-full flex-1 gap-3 justify-center mt-1'):
                                     
                                     with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
                                         ui.label('真实使用内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                        
-                                        pct = snapshot.get('mem_usage_pct', 0.0)
-                                        val = fmt_gb(snapshot['mem_used_gb'])
+                                        pct = snap.get('mem_usage_pct', 0.0)
+                                        val = fmt_gb(snap['mem_used_gb'])
                                         bar_color = 'bg-amber-500/80' if pct > 80 else 'bg-blue-500/80'
-                                        
                                         with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
                                             ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
                                             ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
                                     with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
                                         ui.label('空闲内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                        
                                         free_pct = 100.0 - pct if pct > 0 else 100.0
-                                        val = fmt_gb(snapshot['mem_free_gb'])
+                                        val = fmt_gb(snap['mem_free_gb'])
                                         bar_color = 'bg-emerald-500/80'
-                                        
                                         with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
                                             ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
                                             ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
-                                    render_metric_row('系统缓存', fmt_gb(snapshot['mem_cache_gb']), value_color='text-teal-400')
-                                    render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snapshot['swap_used_gb'])} / {fmt_gb(snapshot['swap_total_gb'])}", f"剩余 {fmt_gb(snapshot['swap_free_gb'])} · 使用率 {snapshot['swap_usage_pct']:.0f}%", value_color='text-purple-400')
+                                    render_metric_row('系统缓存', fmt_gb(snap['mem_cache_gb']), value_color='text-teal-400')
+                                    render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"剩余 {fmt_gb(snap['swap_free_gb'])} · 使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
+                            render_mem_card()
 
+                    # --- 磁盘信息 ---
                     with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                        render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snapshot['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
-                        
-                        with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-1'):
-                            render_metric_row('磁盘设备', snapshot.get('disk_device', '/'), value_color='text-indigo-400')
-                            
-                            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                ui.label('已用容量').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                        @ui.refreshable
+                        def render_disk_card():
+                            snap = get_cached_snapshot()
+                            render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snap['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
+                            with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-1'):
+                                render_metric_row('磁盘设备', snap.get('disk_device', '/'), value_color='text-indigo-400')
                                 
-                                pct = snapshot.get('disk_usage_pct', 0.0)
-                                val = fmt_gb(snapshot['disk_used_gb'])
-                                bar_color = 'bg-orange-500/80' if pct > 85 else 'bg-amber-500/80'
-                                
-                                with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                    ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
-                                    ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('已用容量').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    pct = snap.get('disk_usage_pct', 0.0)
+                                    val = fmt_gb(snap['disk_used_gb'])
+                                    bar_color = 'bg-orange-500/80' if pct > 85 else 'bg-amber-500/80'
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
+                                        ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
-                            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                ui.label('空闲剩余').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                
-                                free_pct = 100.0 - pct if pct > 0 else 100.0
-                                val = fmt_gb(snapshot['disk_free_gb'])
-                                bar_color = 'bg-emerald-500/80'
-                                
-                                with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                    ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
-                                    ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('空闲剩余').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    free_pct = 100.0 - pct if pct > 0 else 100.0
+                                    val = fmt_gb(snap['disk_free_gb'])
+                                    bar_color = 'bg-emerald-500/80'
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
+                                        ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                        render_disk_card()
 
-                render_vps_info_cards()
-                
                 def safe_refresh():
                     try:
                         if not vps_container.is_deleted:
                             render_sync_status.refresh()
-                            render_vps_info_cards.refresh()
+                            render_sys_dyn.refresh()
+                            render_mem_card.refresh()
+                            render_disk_card.refresh()
                     except:
                         pass
                 
