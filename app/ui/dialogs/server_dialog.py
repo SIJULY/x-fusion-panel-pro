@@ -1907,12 +1907,32 @@ PY'''
                                 render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snapshot['swap_used_gb'])} / {fmt_gb(snapshot['swap_total_gb'])}", f"剩余 {fmt_gb(snapshot['swap_free_gb'])} · 使用率 {snapshot['swap_usage_pct']:.0f}%", value_color='text-purple-400')
 
                     with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                        render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率')
-                        with ui.grid().classes('w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-1'):
+                        render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snapshot['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
+                        
+                        with ui.grid().classes('w-full grid-cols-1 md:grid-cols-3 gap-4 mt-1'):
                             render_metric_row('磁盘设备', snapshot.get('disk_device', '/'), value_color='text-indigo-400')
-                            render_metric_row('总容量', fmt_gb(snapshot['disk_total_gb']), value_color='text-slate-200')
-                            render_metric_row('空闲剩余', fmt_gb(snapshot['disk_free_gb']), value_color='text-emerald-400')
-                            render_metric_row('已用容量', f"{fmt_gb(snapshot['disk_used_gb'])} ({snapshot['disk_usage_pct']:.0f}%)", value_color='text-orange-400')
+                            
+                            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                ui.label('已用容量').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                
+                                pct = snapshot.get('disk_usage_pct', 0.0)
+                                val = fmt_gb(snapshot['disk_used_gb'])
+                                bar_color = 'bg-orange-500/80' if pct > 85 else 'bg-amber-500/80'
+                                
+                                with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                    ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
+                                    ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+
+                            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                ui.label('空闲剩余').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                
+                                free_pct = 100.0 - pct if pct > 0 else 100.0
+                                val = fmt_gb(snapshot['disk_free_gb'])
+                                bar_color = 'bg-emerald-500/80'
+                                
+                                with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                    ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
+                                    ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
             render_vps_info_cards()
             
