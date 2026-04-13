@@ -867,6 +867,7 @@ async def render_single_ssh_view(server_conf):
         editor_state.update({'dialog': None, 'files': {}})
         ui.run_javascript('if(window.editorInstance){window.editorInstance.dispose(); window.editorInstance=null;}')
 
+    # 【终极完美版】无缝多标签页，原生JS交互（修复高度塌陷与拖拽冲突）
     async def open_file_editor(entry):
         remote_path = entry.get('path', '')
         if not is_probably_text_file(remote_path):
@@ -904,6 +905,7 @@ async def render_single_ssh_view(server_conf):
             card_id = f"editor_card_{uuid.uuid4().hex[:8]}"
             header_id = f"editor_header_{uuid.uuid4().hex[:8]}"
             
+            # 使用 seamless 解除对底层文件列表的锁定，允许背景交互
             with ui.dialog().props('seamless') as editor_d:
                 editor_state['dialog'] = editor_d
                 
@@ -937,7 +939,9 @@ async def render_single_ssh_view(server_conf):
                             ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
                             ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
 
-                    ui.element('div').props('id="monaco-container"').classes('w-full relative bg-[#1e293b]').style('flex: 1 1 auto; min-height: 0;')
+                    # Monaco 强约束容器：使用 absolute 填满外层相对容器，避免 flex 缩放塌陷
+                    with ui.element('div').classes('w-full relative flex-grow bg-[#1e293b]').style('min-height: 0;'):
+                        ui.element('div').props('id="monaco-container"').classes('absolute inset-0')
                     
                     def on_sync(e):
                         if editor_state['active_path']:
@@ -950,36 +954,54 @@ async def render_single_ssh_view(server_conf):
             
             editor_d.open()
             
+            # 【深度修复机制】使用纯 left/top 替代 transform，完美兼容 CSS resize: both
             ui.run_javascript(f'''
                 setTimeout(() => {{
                     const card = document.getElementById("{card_id}");
                     const header = document.getElementById("{header_id}");
                     if (card && header) {{
                         let isDragging = false;
-                        let currentX = 0, currentY = 0;
-                        let startX, startY;
+                        let startX, startY, initialLeft, initialTop;
 
                         card.style.transition = 'none';
 
                         header.addEventListener('mousedown', (e) => {{
                             if (e.target.closest('button') || e.target.closest('.group')) return;
                             isDragging = true;
-                            startX = e.clientX - currentX;
-                            startY = e.clientY - currentY;
+                            
+                            const rect = card.getBoundingClientRect();
+                            if (card.style.transform) card.style.transform = 'none';
+                            if (card.style.position !== 'fixed') {{
+                                card.style.position = 'fixed';
+                                card.style.margin = '0';
+                            }}
+                            card.style.left = rect.left + 'px';
+                            card.style.top = rect.top + 'px';
+                            card.style.width = rect.width + 'px';
+                            card.style.height = rect.height + 'px';
+
+                            startX = e.clientX;
+                            startY = e.clientY;
+                            initialLeft = rect.left;
+                            initialTop = rect.top;
                         }});
 
                         document.addEventListener('mousemove', (e) => {{
                             if (!isDragging) return;
                             e.preventDefault();
-                            currentX = e.clientX - startX;
-                            currentY = e.clientY - startY;
-                            card.style.transform = `translate(${{currentX}}px, ${{currentY}}px)`;
+                            const dx = e.clientX - startX;
+                            const dy = e.clientY - startY;
+                            card.style.left = (initialLeft + dx) + 'px';
+                            card.style.top = (initialTop + dy) + 'px';
                         }});
 
                         document.addEventListener('mouseup', () => {{ isDragging = false; }});
 
+                        // 监听容器拉伸，实时刷新代码视窗
                         const resizeObserver = new ResizeObserver(() => {{
-                            if (window.editorInstance) window.editorInstance.layout();
+                            if (window.editorInstance) {{
+                                window.requestAnimationFrame(() => window.editorInstance.layout());
+                            }}
                         }});
                         resizeObserver.observe(card);
                     }}
@@ -1118,7 +1140,6 @@ async def render_single_ssh_view(server_conf):
                 ui.button('确认', on_click=do_rename).classes('bg-blue-600 text-white font-bold rounded-lg')
         d.open()
 
-    # 新增：复刻 FinalShell 风格的文件权限修改器
     def open_chmod_dialog(entry):
         target_path = entry.get('path', '')
         filename = entry.get('name', '')
@@ -1137,7 +1158,6 @@ async def render_single_ssh_view(server_conf):
         other_x = len(current_mode_str) > 9 and current_mode_str[9] in ('x', 't', 'T')
 
         with ui.dialog() as d, ui.card().classes('w-80 p-0 bg-[#1e293b] border border-slate-700 shadow-2xl overflow-hidden rounded-lg'):
-            # 仿 Mac 顶部标题栏
             with ui.row().classes('w-full items-center justify-between px-4 py-2 bg-[#111827] border-b border-slate-700'):
                 with ui.row().classes('items-center gap-2'):
                     ui.element('div').classes('w-3 h-3 rounded-full bg-[#ff5f56]')
@@ -1437,13 +1457,13 @@ async def render_single_server_view(server_conf, force_refresh=False):
                 return '--'
             return f"{to_float(value):.2f} GB"
 
-        def render_metric_row(label, value, sub_text=''):
-            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm'):
+        def render_metric_row(label, value, sub_text='', value_color='text-slate-100'):
+            with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80'):
                 with ui.column().classes('gap-0 min-w-0 flex-1'):
                     ui.label(label).classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500')
                     if sub_text:
                         ui.label(sub_text).classes('text-[10px] text-slate-400 mt-1 break-all')
-                ui.label(str(value)).classes('text-sm font-black text-slate-100 text-right shrink-0')
+                ui.label(str(value)).classes(f'text-sm font-black text-right shrink-0 {value_color}')
 
         def render_section_header(title, icon, accent_class, desc='', right_renderer=None):
             with ui.row().classes('w-full items-center justify-between px-4 py-3 rounded-xl border border-slate-700 bg-slate-800/80 shadow-sm min-h-[64px]'):
@@ -2017,26 +2037,26 @@ PY'''
                             ui.image(os_logo_url).classes('w-9 h-9 object-contain')
                             ui.label(runtime_snapshot.get('os', '--')).classes('text-base font-black text-slate-50 text-center break-all max-w-full')
                         with ui.column().classes('w-full gap-3 flex-1 justify-center'):
-                            render_metric_row('处理器架构', format_arch_text(runtime_snapshot.get('arch', '--')))
-                            render_metric_row('系统内核', runtime_snapshot.get('kernel', '--'))
-                            render_metric_row('在线运行时间', runtime_snapshot.get('uptime', '--'))
+                            render_metric_row('处理器架构', format_arch_text(runtime_snapshot.get('arch', '--')), value_color='text-cyan-400')
+                            render_metric_row('系统内核', runtime_snapshot.get('kernel', '--'), value_color='text-blue-400')
+                            render_metric_row('在线运行时间', runtime_snapshot.get('uptime', '--'), value_color='text-emerald-400')
 
                     with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                        render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"已用内存：{clamp_percent(runtime_snapshot.get('mem_usage_pct', 0)):.0f}%").classes('text-sm font-black text-slate-100'))
+                        render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"已用：{clamp_percent(runtime_snapshot.get('mem_usage_pct', 0)):.0f}%").classes('text-sm font-black text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
                         with ui.column().classes('w-full flex-1 gap-3 justify-center'):
-                            render_metric_row('系统总内存', fmt_gb(runtime_snapshot.get('mem_total_gb')))
-                            render_metric_row('空闲内存', fmt_gb(runtime_snapshot.get('mem_free_gb')))
-                            render_metric_row('真实使用内存', fmt_gb(runtime_snapshot.get('mem_used_gb')))
-                            render_metric_row('系统缓存', fmt_gb(runtime_snapshot.get('mem_cache_gb')))
-                            render_metric_row('SWAP 虚拟内存', f"{fmt_gb(runtime_snapshot.get('swap_used_gb'))} / {fmt_gb(runtime_snapshot.get('swap_total_gb'))}", f"剩余 {fmt_gb(runtime_snapshot.get('swap_free_gb'))} · 使用率 {clamp_percent(runtime_snapshot.get('swap_usage_pct', 0)):.0f}%")
+                            render_metric_row('系统总内存', fmt_gb(runtime_snapshot.get('mem_total_gb')), value_color='text-slate-200')
+                            render_metric_row('空闲内存', fmt_gb(runtime_snapshot.get('mem_free_gb')), value_color='text-emerald-400')
+                            render_metric_row('真实使用内存', fmt_gb(runtime_snapshot.get('mem_used_gb')), value_color='text-amber-400')
+                            render_metric_row('系统缓存', fmt_gb(runtime_snapshot.get('mem_cache_gb')), value_color='text-teal-400')
+                            render_metric_row('SWAP 虚拟内存', f"{fmt_gb(runtime_snapshot.get('swap_used_gb'))} / {fmt_gb(runtime_snapshot.get('swap_total_gb'))}", f"剩余 {fmt_gb(runtime_snapshot.get('swap_free_gb'))} · 使用率 {clamp_percent(runtime_snapshot.get('swap_usage_pct', 0)):.0f}%", value_color='text-purple-400')
 
                 with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                     render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率')
                     with ui.grid().classes('w-full grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3'):
-                        render_metric_row('磁盘设备', runtime_snapshot.get('disk_device', '/'))
-                        render_metric_row('总容量', fmt_gb(runtime_snapshot.get('disk_total_gb')))
-                        render_metric_row('空闲剩余', fmt_gb(runtime_snapshot.get('disk_free_gb')))
-                        render_metric_row('已用容量', f"{fmt_gb(runtime_snapshot.get('disk_used_gb'))} ({clamp_percent(runtime_snapshot.get('disk_usage_pct', 0)):.0f}%)")
+                        render_metric_row('磁盘设备', runtime_snapshot.get('disk_device', '/'), value_color='text-indigo-400')
+                        render_metric_row('总容量', fmt_gb(runtime_snapshot.get('disk_total_gb')), value_color='text-slate-200')
+                        render_metric_row('空闲剩余', fmt_gb(runtime_snapshot.get('disk_free_gb')), value_color='text-emerald-400')
+                        render_metric_row('已用容量', f"{fmt_gb(runtime_snapshot.get('disk_used_gb'))} ({clamp_percent(runtime_snapshot.get('disk_usage_pct', 0)):.0f}%)", value_color='text-orange-400')
 
         ui.element('div').classes('h-6 flex-shrink-0')
 
