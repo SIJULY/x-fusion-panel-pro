@@ -1495,15 +1495,24 @@ async def render_single_server_view(server_conf, force_refresh=False):
             def get_os_visual(os_name):
                 name = str(os_name or '').lower()
                 if 'ubuntu' in name:
-                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0U5NTQyMCI+PHBhdGggZD0iTTExLjk4MyAwYTExLjk3IDExLjk3IDAgMDAtOC45MSAzLjU5M0ExMS45NiAxMS45NiAwIDAwLjA0NiAxMS4wM2EyLjYgMi42IDAgMDAxLjA3NyAyLjM3OGMuMDU4LjA0LjExNi4wODIuMTc2LjEyYTIuNjEzIDIuNjEzIDAgMDAyLjM5NC4wMjUgMi42MjcgMi42MjcgMCAwMDEuMzcxLTEuNjM2IDUuODY1IDUuODY1IDAgMDEwLjE1NS0yLjkwNkE1Ljg1IDUuODUgMCAwMTE2LjU5MyAxNy41YTIuNjM3IDIuNjM3IDAgMDAuNTg0IDEuOTU2IDIuNjEgMi42MSAwIDAwMS45OTYuODgzYy4xMjMgMCAuMjQ4LS4wMS4zNzItLjAzM2EyLjYxNSAyLjYxNSAwIDAwMi4wNDYtMS40NjRBMTEuOTUzIDExLjk1MyAwIDAwMjMuOTU0IDExLjNhMTEuOTY0IDExLjk2NCAwIDAwLTIuODgzLTguM0ExMS45NzUgMTEuOTc1IDAgMDAxMS45ODMgMHptLTUuNDYgNy42MDhhMi41MzYgMi41MzYgMCAwMC0xLjc0OC43NDIgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzYgMi41MzYgMCAwMC0xLjc3Ni0uNzN6bTExLjAxIDQuMzlhMi41MzYgMi41MzYgMCAwMC0xLjc0OC43NDMgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzUgMi41MzUgMCAwMC0xLjc3Ni0uNzN6TTYuNTI0IDE2LjRhMi41MzcgMi41MzcgMCAwMC0xLjc0OC43NDIgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzYgMi41MzYgMCAwMC0xLjc3Ni0uNzN6Ii8+PC9zdmc+'
-                elif 'debian' in name:
-                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0E4MUQzMyI+PHBhdGggZD0iTTEyIDBDNS4zNzMgMCAwIDUuMzczIDAgMTJzNS4zNzMgMTIgMTIgMTIgMTItNS4zNzMgMTItMTJTMTguNjI3IDAgMTIgMHptNi41NDEgMTYuNDY3Yy0uMjEzLjYyNi0uNTI1IDEuMjUyLTEuMDEwIDEuNzM3LS40ODUuNDg1LTEuMTExLjc5OC0xLjczNyAxLjAxLS42MjYuMjEyLTEuMzEzLjMxMy0yLjAyMC4zMTMtLjcwNyAwLTEuMzk0LS4xMDEtMi4wMjAtLjMxMy0uNjI2LS4yMTItMS4yNTItLjUyNS0xLjczNy0xLjAxLS40ODUtLjQ4NS0uNzk4LTEuMTExLTEuMDEwLTEuNzM3LS4yMTItLjYyNi0uMzEzLTEuMzEzLS4zMTMtMi4wMiAwLS43MDcuMTAxLTEuMzk0LjMxMy0yLjAyLjIxMi0uNjI2LjUyNS0xLjI1MiAxLjAxMC0xLjczNy40ODUtLjQ4NSAxLjExMS0uNzk4IDEuNzM3LTEuMDEuNjI2LS4yMTIgMS4zMTMtLjMxMyAyLjAyMC0uMzEzLjcwNyAwIDEuMzk0LjEwMSAyLjAyMC4zMTMuNjI2LjIxMiAxLjI1Mi41MjUgMS43MzcgMS4wMS40ODUuNDg1Ljc5OCAxLjExMSAxLjAxIDEuNzM3LjIxMi42MjYuMzEzIDEuMzEzLjMxMyAyLjAyIDAgLjcwNy0uMTAxIDEuMzk0LS4zMTMgMi4wMnpNMTQuODc1IDExLjk0M2MtLjE2MS0uMjQyLS4zNjMtLjQ2NC0uNTg1LS42NDYtLjIyMi0uMTgyLS40NzQtLjMyMy0uNzQ3LS40MjQtLjI3My0uMTAxLS41NjUtLjE1MS0uODY4LS4xNTEtLjMwMyAwLS41OTUtLjA1Ljg2OC4xNTEtLjI3My4xMDEtLjUyNS4yNDItLjc0Ny40MjQtLjIyMi4xODItLjQyNC40MDQtLjU4NS42NDYtLjE2MS4yNDItLjI4My41MTUtLjM2My44MDgtLjA4MS4yOTMtLjEyMS42MDYtLjEyMS45MjkgMCAuMzIzLjA0LjYzNi4xMjEuOTI5LjA4MS4yOTMuMjAyLjU2NS4zNjMuODA4LjE2MS4yNDIuMzYzLjQ2NC41ODUuNjQ2LjIyMi4xODIuNDc0LjMyMy43NDcuNDI0LjI3My4xMDEtLjU2NS4xNTEtLjg2OC4xNTEtLjMwMyAwLS41OTUtLjA1LS44NjgtLjE1MS0uMjczLS4xMDEtLjUyNS0uMjQyLS43NDctLjQyNC0uMjIyLS4xODItLjQyNC0uNDA0LS41ODUtLjY0Ni0uMTYxLS4yNDItLjI4My0uNTE1LS4zNjMtLjgwOC0uMDgxLS4yOTMtLjEyMS0uNjA2LS4xMjEtLjkyOSAwLS4zMjMtLjA0LS4YzNi0uMTIxLS45MjktLjA4MS0uMjkzLS4yMDItLjU2NS0uMzYzLS44MDh6Ii8+PC9zdmc+'
-                elif 'centos' in name:
-                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzI2MjU3NyI+PHBhdGggZD0iTTIyLjU4IDkuMzg5YS41Ni41NiAwIDAwLS40NjItLjE2NmwtNC4wNDYuODE4YTEuNjI4IDEuNjI4IDAgMDAtMS4xMjkgMS4xMjdsLS44MTggNC4wNDVhLjU2LjU2IDAgMDAuMTY1LjQ2M2wyLjk0IDIuOTRjLjI2Mi4yNjMuNzQyLjI1NyAxLjAxNC0uMDE0bDQuMTE3LTQuMTE2Yy4yNy0uMjcxLjI3Ni0uNzUyLjAxNC0xLjAxNHptLTEzLjI1IDguOTlsLS44MTcgNC4wNDVhLjU2LjU2IDAgMDAuMTY1LjQ2M2wyLjkzOSAyLjk0Yy4yNjMuMjYzLjc0Mi4yNTcgMS4wMTQtLjAxNGw0LjExNy00LjExNmMuMjcxLS4yNzEuMjc3LS43NTIuMDE0LTEuMDE0bC0yLjk0LTIuOTM5YS41Ni41NiAwIDAwLS40NjItLjE2NWwtNC4wMzIuODA1em0tNy45MTItMy43NmwuODE4LTQuMDQ1YS41Ni41NiAwIDAwLS4xNjYtLjQ2M2wtMi45NC0yLjkzOWMtLjI2Mi0uMjY0LS43NDItLjI1OC0xLjAxNC4wMTRsLTQuMTE3IDQuMTE2Yy0uMjcwLjI3MS0uMjc2Ljc1Mi0uMDE0IDEuMTAxNGwyLjk0IDIuOTRjLjEyLjEyLjI5OC4xNjguNDYyLjE2NWw0LjAzMi0uODA1em0xMy4yNTEtOC45OWwuODE3LTQuMDQ1YS41Ni41NiAwIDAwLS4xNjUtLjQ2M0wxMi40NjMuMTQyYy0uMjYzLS4yNjMtLjc0Mi0uMjU3LTEuMDE0LjAxNGwtNC4xMTcgNC4xMTZjLS4yNzEuMjc1LS4yNzYuNzUxLS4wMTQgMS4wMTRsMi45NCAyLjk0YS41Ni41NiAwIDAwLjQ2Mi4xNjVsNC4wMzItLjgwNXoiLz48L3N2Zz4='
-                elif 'alpine' in name:
-                     return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzBFQTVFOSI+PHBhdGggZD0iTTIyLjE4MyA1Ljg1MWMtLjUwNC0uNDQ0LTEuMjU4LS40OC0xLjcyMi0uMDkzbC01LjgxIDQuODM0LS4xMzItLjA0LTMuMjUzLTMuNTVhMS4zMiAxLjMyIDAgMDAtMS42NTMtLjE4NUwyLjExNyAxMi4xMTNhMS4yODYgMS4yODYgMCAwMC0uMjA5IDEuOTQxbDEyLjQzNiAxMC4wMGEyLjM1NSAyLjM1NSAwIDAwMS40MTIuNDg1aDYuMTMyYy44NjQgMCAxLjU2Ni0uNzI5IDEuNDc4LTEuNTg4TDIyLjE4MyA1Ljg1MXptLTE1LjA3NCA5LjMyTDEwLjc5IDkuMDk4bDMuNTMgMy44NTFhLjE2LjE2IDAgMDAuMTA2LjA2MmwyLjg2My44NjhhLjEyNS4xMjUgMCAwMTAuMTk2TDIuODcgMjEuMzQyIDEuOTEzIDEyLjExMmEuMjUuMjUgMCAwMS4wMzMtLjM2NGw1LjE2My00LjE2OQoicC8+PC9zdmc+'
+                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23E95420"%3E%3Cpath d="M11.983 0a11.97 11.97 0 00-8.91 3.593A11.96 11.96 0 00.046 11.03a2.6 2.6 0 001.077 2.378c.058.04.116.082.176.12a2.613 2.613 0 002.394.025 2.627 2.627 0 001.371-1.636 5.865 5.865 0 010.155-2.906A5.85 5.85 0 0116.593 17.5a2.637 2.637 0 00.584 1.956 2.61 2.61 0 001.996.883c.123 0 .248-.01.372-.033a2.615 2.615 0 002.046-1.464A11.953 11.953 0 0023.954 11.3a11.964 11.964 0 00-2.883-8.3A11.975 11.975 0 0011.983 0zm-5.46 7.608a2.536 2.536 0 00-1.748.742 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.536 2.536 0 00-1.776-.73zm11.01 4.39a2.536 2.536 0 00-1.748.743 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.535 2.535 0 00-1.776-.73zM6.524 16.4a2.537 2.537 0 00-1.748.742 2.535 2.535 0 00-.73 1.776 2.54 2.54 0 00.742 1.748 2.535 2.535 0 001.776.73 2.536 2.536 0 001.748-.742 2.535 2.535 0 00.73-1.776 2.54 2.54 0 00-.742-1.748 2.536 2.536 0 00-1.776-.73z"/%3E%3C/svg%3E', 'Ubuntu'
+                if 'debian' in name:
+                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23A81D33"%3E%3Cpath d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm6.541 16.467c-.213.626-.525 1.252-1.01 1.737-.485.485-1.111.798-1.737 1.01-.626.212-1.313.313-2.02.313-.707 0-1.394-.101-2.02-.313-.626-.212-1.252-.525-1.737-1.01-.485-.485-.798-1.111-1.01-1.737-.212-.626-.313-1.313-.313-2.02 0-.707.101-1.394.313-2.02.212-.626.525-1.252 1.01-1.737.485-.485 1.111-.798 1.737-1.01.626-.212 1.313-.313 2.02-.313.707 0 1.394.101 2.02.313.626.212 1.252.525 1.737 1.01.485.485.798 1.111 1.01 1.737.212.626.313 1.313.313 2.02 0 .707-.101 1.394-.313 2.02zM14.875 11.943c-.161-.242-.363-.464-.585-.646-.222-.182-.474-.323-.747-.424-.273-.101-.565-.151-.868-.151-.303 0-.595.05-.868.151-.273.101-.525.242-.747.424-.222.182-.424.404-.585.646-.161.242-.283.515-.363.808-.081.293-.121.606-.121.929 0 .323.04.636.121.929.081.293.202.565.363.808.161.242.363.464.585.646.222.182.474.323.747.424.273.101-.565.151-.868.151-.303 0-.595-.05-.868-.151-.273-.101-.525-.242-.747-.424-.222-.182-.424-.404-.585-.646-.161-.242-.283-.515-.363-.808-.081-.293-.121-.606-.121-.929 0-.323-.04-.636-.121-.929-.081-.293-.202-.565-.363-.808z"/%3E%3C/svg%3E', 'Debian'
+                if 'centos' in name:
+                    return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23262577"%3E%3Cpath d="M22.58 9.389a.56.56 0 00-.462-.166l-4.046.818a1.628 1.628 0 00-1.129 1.127l-.818 4.045a.56.56 0 00.165.463l2.94 2.94c.262.263.742.257 1.014-.014l4.117-4.116c.27-.271.276-.752.014-1.014zm-13.25 8.99l-.817 4.045a.56.56 0 00.165.463l2.939 2.94c.263.263.742.257 1.014-.014l4.117-4.116c.271-.271.277-.752.014-1.014l-2.94-2.939a.56.56 0 00-.462-.165l-4.032.805zm-7.912-3.76l.818-4.045a.56.56 0 00-.166-.463l-2.94-2.939c-.262-.264-.742-.258-1.014.014l-4.117 4.116c-.270.271-.276.752-.014 1.1014l2.94 2.94c.12.12.298.168.462.165l4.032-.805zm13.251-8.99l.817-4.045a.56.56 0 00-.165-.463L12.463.142c-.263-.263-.742-.257-1.014.014l-4.117 4.116c-.271.275-.276.751-.014 1.014l2.94 2.94a.56.56 0 00.462.165l4.032-.805z"/%3E%3C/svg%3E', 'CentOS'
+                if 'red hat' in name:
+                    return 'https://cdn.simpleicons.org/redhat/EE0000', 'RedHat'
+                if 'rocky' in name:
+                    return 'https://cdn.simpleicons.org/rockylinux/10B981', 'RockyLinux'
+                if 'alma' in name:
+                    return 'https://cdn.simpleicons.org/almalinux/2563EB', 'AlmaLinux'
+                if 'alpine' in name:
+                    return 'https://cdn.simpleicons.org/alpinelinux/0EA5E9', 'Alpine'
+                if 'arch' in name:
+                    return 'https://cdn.simpleicons.org/archlinux/1793D1', 'ArchLinux'
                 
-                return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0ZDQzYyNCI+PHBhdGggZD0iTTExLjggMTFDOS41MyAxMSA3LjcgMTIuNjIgNy43IDE0LjYyYy0xLjQyLS4wNC0yLjczLjI4LTMuNDEgMS4xNS0uNzYuOTQtLjUxIDIuNTEuNDggMy40NSAxLjEyLDEuMDYgMy4xNCAxLjMzIDQuOTEgMS4yLS4yLjA0LS40LjA5LS42Mi4xNC0xLjU1LjM4LTEuNjQgMS44Ni0xLjYzIDIuNjEuMDEuNzcuNjUgMS4zNiAxLjQ1IDEuMTRsMi42OC0uNTVhNS40IDUuNCAwIDAgMCA0LjUtMi4yNWMuNS0uOC44LTEuNjYuODQtMi41OS4xMi0uMTEuMjMtLjI1LjMyLS4zOS45NC0xLjM2IDEuMjYtMy4zNC41Ni00LjM5LS44Ny0xLjMxLTIuODQtMS4yNi00LjUxLTEuMDkuMDEtMS45OC0xLjgxLTMuNjMtNC4wNi0zLjYzem00IDAuOTJhMS40NiAxLjQ2IDAgMCAxIDEuNDUgMS40NyAxLjQ2IDEuNDYgMCAwIDEtMS40NSAxLjQ3IDEuNDYgMS40NiAwIDAgMS0xLjQ1LTEuNDcgMS40NiAxLjQ2IDAgMCAxIDEuNDUtMS40N3oiLz48L3N2Zz4='
+                # 通用 Linux (小企鹅 Tux)
+                return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23FCC624"%3E%3Cpath d="M11.8 11C9.53 11 7.7 12.62 7.7 14.62c-1.42-.04-2.73.28-3.41 1.15-.76.94-.51 2.51.48 3.45 1.12 1.06 3.14 1.33 4.91 1.2-.2.04-.4.09-.62.14-1.55.38-1.64 1.86-1.63 2.61.01.77.65 1.36 1.45 1.14l2.68-.55a5.4 5.4 0 0 0 4.5-2.25c.5-.8.8-1.66.84-2.59.12-.11.23-.25.32-.39.94-1.36 1.26-3.34.56-4.39-.87-1.31-2.84-1.26-4.51-1.09.01-1.98-1.81-3.63-4.06-3.63zm4 .92a1.46 1.46 0 0 1 1.45 1.47 1.46 1.46 0 0 1-1.45 1.47 1.46 1.46 0 0 1-1.45-1.47 1.46 1.46 0 0 1 1.45-1.47z"/%3E%3C/svg%3E', 'Linux'
 
             def format_arch_text(arch_value):
                 value = str(arch_value or '--').strip().lower()
@@ -1863,7 +1872,7 @@ PY'''
                         with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
                             
                             with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                                os_logo_url = get_os_visual(snapshot['os'])
+                                os_logo_url, _ = get_os_visual(snapshot['os'])
                                 
                                 cores = snapshot.get('cpu_cores')
                                 core_label = f"{cores} C" if cores else ""
@@ -1877,7 +1886,7 @@ PY'''
                                 )
                                 
                                 with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm transition-all hover:bg-slate-800/60 flex-nowrap'):
-                                    ui.html(f'<img src="{os_logo_url}" class="w-6 h-6 object-contain shrink-0" style="display:inline-block;" />')
+                                    ui.image(os_logo_url).classes('w-6 h-6 object-contain shrink-0')
                                     ui.label(snapshot['os']).classes('text-sm font-black text-slate-50 truncate')
                                 
                                 with ui.column().classes('w-full gap-3 flex-1 justify-center mt-1'):
@@ -1952,52 +1961,52 @@ PY'''
                                     ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
                                     ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
-            render_vps_info_cards()
-            
-            def safe_refresh():
-                try:
-                    if not vps_container.is_deleted:
-                        render_sync_status.refresh()
-                        render_vps_info_cards.refresh()
-                except:
-                    pass
-            
-            ui.timer(2.0, safe_refresh)
+                render_vps_info_cards()
+                
+                def safe_refresh():
+                    try:
+                        if not vps_container.is_deleted:
+                            render_sync_status.refresh()
+                            render_vps_info_cards.refresh()
+                    except:
+                        pass
+                
+                ui.timer(2.0, safe_refresh)
 
-        ui.element('div').classes('h-6 flex-shrink-0')
+            ui.element('div').classes('h-6 flex-shrink-0')
 
-        with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
-            with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
-                with ui.row().classes('items-center gap-2'):
-                    ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
-                    if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
-                        ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
-                    elif server_conf.get('user'):
-                        ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
-                with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
-                    from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
+            with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
+                with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
+                    with ui.row().classes('items-center gap-2'):
+                        ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
+                        if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
+                            ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
+                        elif server_conf.get('user'):
+                            ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
+                    with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
+                        from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
 
-                    ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                    ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                    ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                    if has_manager_access:
-                        async def on_add_success():
-                            ui.notify('添加节点成功')
-                            await reload_and_refresh_ui()
-                        ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
-                    else:
-                        ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
+                        ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                        ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                        ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                        if has_manager_access:
+                            async def on_add_success():
+                                ui.notify('添加节点成功')
+                                await reload_and_refresh_ui()
+                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
+                        else:
+                            ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
-            with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
-                ui.label('节点名称').classes('text-left pl-2')
-                for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
-                    ui.label(h).classes('text-center')
+                with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
+                    ui.label('节点名称').classes('text-left pl-2')
+                    for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
+                        ui.label(h).classes('text-center')
 
-            with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
-                await render_node_list()
+                with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
+                    await render_node_list()
 
-        if has_manager_access and not NODES_DATA.get(server_conf['url']):
-            ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
+            if has_manager_access and not NODES_DATA.get(server_conf['url']):
+                ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
 
 
 async def render_aggregated_view(server_list, show_ping=False, token=None, initial_page=1):
