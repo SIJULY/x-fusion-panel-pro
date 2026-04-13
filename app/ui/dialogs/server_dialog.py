@@ -911,6 +911,7 @@ async def render_single_ssh_view(server_conf):
         with client:
             card_id = f"editor_card_{uuid.uuid4().hex[:8]}"
             header_id = f"editor_header_{uuid.uuid4().hex[:8]}"
+            container_id = f"monaco_{uuid.uuid4().hex[:8]}"
             
             with ui.dialog().props('seamless') as editor_d:
                 editor_state['dialog'] = editor_d
@@ -945,7 +946,9 @@ async def render_single_ssh_view(server_conf):
                             ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
                             ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
 
-                    ui.element('div').props('id="monaco-container"').classes('w-full relative flex-grow bg-[#1e293b]').style('min-height: 0;')
+                    # 核心修复点：为 Monaco 包裹一层带有独立 ID 的 Absolute 绝对定位容器，彻底避免 Flexbox 缩放导致的高度坍塌
+                    with ui.element('div').classes('w-full relative flex-grow bg-[#1e293b]').style('min-height: 0; flex: 1 1 auto;'):
+                        ui.element('div').props(f'id="{container_id}"').classes('absolute inset-0')
                     
                     def on_sync(e):
                         if editor_state['active_path']:
@@ -962,6 +965,8 @@ async def render_single_ssh_view(server_conf):
                 setTimeout(() => {{
                     const card = document.getElementById("{card_id}");
                     const header = document.getElementById("{header_id}");
+                    const monacoContainer = document.getElementById("{container_id}");
+                    
                     if (card && header) {{
                         let isDragging = false;
                         let currentX = 0, currentY = 0;
@@ -1001,12 +1006,15 @@ async def render_single_ssh_view(server_conf):
 
                         document.addEventListener('mouseup', () => {{ isDragging = false; }});
 
-                        const resizeObserver = new ResizeObserver(() => {{
-                            if (window.editorInstance) {{
-                                window.requestAnimationFrame(() => window.editorInstance.layout());
-                            }}
-                        }});
-                        resizeObserver.observe(card);
+                        if (monacoContainer) {{
+                            const resizeObserver = new ResizeObserver(() => {{
+                                if (window.editorInstance) {{
+                                    window.requestAnimationFrame(() => window.editorInstance.layout());
+                                }}
+                            }});
+                            // 监听 card 自身的尺寸变化，一旦用户拖拽右下角缩放，立刻通知 Monaco 重新计算内部尺寸
+                            resizeObserver.observe(card);
+                        }}
                     }}
 
                     if(window.editorInstance) {{
@@ -1017,7 +1025,7 @@ async def render_single_ssh_view(server_conf):
                     const initMonaco = () => {{
                         require.config({{ paths: {{ 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }}}});
                         require(['vs/editor/editor.main'], function() {{
-                            window.editorInstance = monaco.editor.create(document.getElementById('monaco-container'), {{
+                            window.editorInstance = monaco.editor.create(document.getElementById('{container_id}'), {{
                                 value: '',
                                 language: 'plaintext',
                                 theme: 'vs-dark',
@@ -1585,8 +1593,13 @@ PY'''
             ui.timer(0.1, run_ssh_fallback, once=True)
 
             def get_cached_snapshot():
+                import time as _time
                 probe_cache = PROBE_DATA_CACHE.get(server_conf['url'], {}) or {}
                 static = probe_cache.get('static', {}) or {}
+                
+                now_ts = _time.time()
+                # 核心改动：探针如果超过 20 秒没心跳，标记为过期(已离线)
+                is_stale = bool(probe_cache and (now_ts - probe_cache.get('last_updated', 0) > 20))
                 
                 mem_total = to_float(probe_cache.get('mem_total', 0.0))
                 mem_usage_pct = clamp_percent(probe_cache.get('mem_usage', 0.0))
@@ -1598,24 +1611,29 @@ PY'''
                 disk_usage_pct = clamp_percent(probe_cache.get('disk_usage', 0.0))
                 disk_used = round(disk_total * disk_usage_pct / 100.0, 2)
                 
-                cpu_usage_pct = clamp_percent(probe_cache.get('cpu_usage', 0.0))
+                # 若已离线，CPU和系统缓存等动态使用率强制归零
+                cpu_usage_pct = 0.0 if is_stale else clamp_percent(probe_cache.get('cpu_usage', 0.0))
                 cpu_cores = probe_cache.get('cpu_cores') or static.get('cpu_cores') or ssh_fallback_data.get('cpu_cores') or 0
+                
+                uptime_val = probe_cache.get('uptime') or ssh_fallback_data.get('uptime') or '--'
+                if is_stale:
+                    uptime_val = '⚠️ 机器已离线'
                 
                 return {
                     'os': static.get('os') or ssh_fallback_data.get('os') or '--',
                     'arch': static.get('arch') or ssh_fallback_data.get('arch') or '--',
-                    'uptime': probe_cache.get('uptime') or ssh_fallback_data.get('uptime') or '--',
+                    'uptime': uptime_val,
                     'cpu_cores': cpu_cores,
                     'cpu_usage_pct': cpu_usage_pct,
                     'mem_total_gb': mem_total,
                     'mem_free_gb': max(mem_total - mem_used, 0.0) if mem_total else 0.0,
                     'mem_used_gb': mem_used,
                     'mem_cache_gb': to_float(probe_cache.get('mem_cache_gb', 0.0)),
-                    'mem_usage_pct': mem_usage_pct,
+                    'mem_usage_pct': 0.0 if is_stale else mem_usage_pct,
                     'swap_total_gb': swap_total,
                     'swap_free_gb': swap_free,
                     'swap_used_gb': max(swap_total - swap_free, 0.0),
-                    'swap_usage_pct': clamp_percent((max(swap_total - swap_free, 0.0) / swap_total * 100.0) if swap_total else 0.0),
+                    'swap_usage_pct': 0.0 if is_stale else clamp_percent((max(swap_total - swap_free, 0.0) / swap_total * 100.0) if swap_total else 0.0),
                     'disk_device': probe_cache.get('disk_device') or '/',
                     'disk_total_gb': disk_total,
                     'disk_free_gb': max(disk_total - disk_used, 0.0) if disk_total else 0.0,
@@ -1826,10 +1844,17 @@ PY'''
                                 is_online = False
                                 now_ts = _time.time()
                                 probe_cache = PROBE_DATA_CACHE.get(server_conf['url'])
-                                if probe_cache and (now_ts - probe_cache.get('last_updated', 0) < 20):
+                                probe_alive = probe_cache and (now_ts - probe_cache.get('last_updated', 0) < 20)
+
+                                if probe_alive:
                                     is_online = True
+                                elif server_conf.get('probe_installed'):
+                                    # 探针模式下，只要心跳超时20秒，立即切灰
+                                    is_online = False
                                 elif server_conf.get('_status') == 'online':
+                                    # 纯 API 托管模式
                                     is_online = True
+
                                 if is_online:
                                     ui.badge('Online', color='green').props('rounded outline size=xs')
                                 else:
@@ -1854,9 +1879,13 @@ PY'''
                     
                     @ui.refreshable
                     def render_sync_status():
-                        snapshot = get_cached_snapshot()
-                        if snapshot['has_probe']:
-                            ui.label('🟢 探针实时同步中').classes('text-xs text-emerald-400 font-bold tracking-wide shadow-emerald-400/50')
+                        import time as _time
+                        probe_cache = PROBE_DATA_CACHE.get(server_conf['url'])
+                        if probe_cache:
+                            if (_time.time() - probe_cache.get('last_updated', 0)) > 20:
+                                ui.label('🔴 探针已断联 (离线)').classes('text-xs text-red-500 font-bold tracking-wide')
+                            else:
+                                ui.label('🟢 探针实时同步中').classes('text-xs text-emerald-400 font-bold tracking-wide shadow-emerald-400/50')
                         else:
                             ui.label('⚪ 等待探针数据').classes('text-xs text-slate-500 font-bold')
                     render_sync_status()
@@ -1864,7 +1893,6 @@ PY'''
                 with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
                     with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
                         
-                        # --- 系统信息 ---
                         with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                             snapshot_init = get_cached_snapshot()
                             os_logo_url, _ = get_os_visual(snapshot_init['os'])
@@ -1902,7 +1930,6 @@ PY'''
                                     render_metric_row('在线运行时间', snap.get('uptime', '--'), value_color='text-emerald-400')
                                 render_sys_dyn()
 
-                        # --- 内存信息 ---
                         with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                             @ui.refreshable
                             def render_mem_card():
@@ -1932,7 +1959,6 @@ PY'''
                                     render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"剩余 {fmt_gb(snap['swap_free_gb'])} · 使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
                             render_mem_card()
 
-                    # --- 磁盘信息 ---
                     with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                         @ui.refreshable
                         def render_disk_card():
