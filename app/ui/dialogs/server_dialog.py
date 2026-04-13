@@ -1841,7 +1841,7 @@ PY'''
                 def render_vps_info_cards():
                     snapshot = get_cached_snapshot()
                     with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
-                        with ui.grid().classes('w-full grid-cols-1 xl:grid-cols-2 gap-4 items-stretch'):
+                        with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
                             
                             with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                                 os_logo_url, _ = get_os_visual(snapshot['os'])
@@ -1908,7 +1908,7 @@ PY'''
                         with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                             render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snapshot['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
                             
-                            with ui.grid().classes('w-full grid-cols-1 md:grid-cols-3 gap-4 mt-1'):
+                            with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-1'):
                                 render_metric_row('磁盘设备', snapshot.get('disk_device', '/'), value_color='text-indigo-400')
                                 
                                 with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
