@@ -608,6 +608,7 @@ async def render_single_ssh_view(server_conf):
         read_remote_file,
         write_remote_file,
         upload_remote_file,
+        rename_remote_path,
     )
     from app.ui.pages.content_router import content_container, refresh_content
 
@@ -866,7 +867,6 @@ async def render_single_ssh_view(server_conf):
         editor_state.update({'dialog': None, 'files': {}})
         ui.run_javascript('if(window.editorInstance){window.editorInstance.dispose(); window.editorInstance=null;}')
 
-    # 【终极完美版】无缝多标签页，原生JS交互（告别报错）
     async def open_file_editor(entry):
         remote_path = entry.get('path', '')
         if not is_probably_text_file(remote_path):
@@ -904,7 +904,6 @@ async def render_single_ssh_view(server_conf):
             card_id = f"editor_card_{uuid.uuid4().hex[:8]}"
             header_id = f"editor_header_{uuid.uuid4().hex[:8]}"
             
-            # 使用 seamless 彻底解除对底层文件列表的锁定，背景依然可以交互
             with ui.dialog().props('seamless') as editor_d:
                 editor_state['dialog'] = editor_d
                 
@@ -938,7 +937,6 @@ async def render_single_ssh_view(server_conf):
                             ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
                             ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
 
-                    # 极其稳定的自适应容器
                     ui.element('div').props('id="monaco-container"').classes('w-full relative bg-[#1e293b]').style('flex: 1 1 auto; min-height: 0;')
                     
                     def on_sync(e):
@@ -1094,6 +1092,109 @@ async def render_single_ssh_view(server_conf):
                 ui.button('创建', icon='add', on_click=create_target).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
         d.open()
 
+    def open_rename_dialog(entry):
+        old_name = entry.get('name', '')
+        old_path = entry.get('path', '')
+        with ui.dialog() as d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-700'):
+            ui.label('重命名').classes('text-lg font-bold text-white')
+            new_name_input = ui.input('新名称', value=old_name).classes('w-full').props('outlined dense dark bg-color="slate-800"')
+
+            async def do_rename():
+                new_name = new_name_input.value.strip()
+                if not new_name or new_name == old_name:
+                    d.close()
+                    return
+                new_path = join_remote_path(get_parent_remote_path(old_path), new_name)
+                try:
+                    await run.io_bound(rename_remote_path, server_conf, old_path, new_path)
+                    safe_notify(f'重命名成功: {new_name}', 'positive')
+                    d.close()
+                    await refresh_remote_dir(file_state['current_path'])
+                except Exception as e:
+                    safe_notify(f'重命名失败: {e}', 'negative')
+
+            with ui.row().classes('w-full justify-end gap-2 mt-4'):
+                ui.button('取消', on_click=d.close).props('flat color=grey')
+                ui.button('确认', on_click=do_rename).classes('bg-blue-600 text-white font-bold rounded-lg')
+        d.open()
+
+    # 新增：复刻 FinalShell 风格的文件权限修改器
+    def open_chmod_dialog(entry):
+        target_path = entry.get('path', '')
+        filename = entry.get('name', '')
+        current_mode_str = entry.get('mode', '----------')
+        
+        owner_r = len(current_mode_str) > 1 and current_mode_str[1] == 'r'
+        owner_w = len(current_mode_str) > 2 and current_mode_str[2] == 'w'
+        owner_x = len(current_mode_str) > 3 and current_mode_str[3] in ('x', 's', 'S')
+        
+        group_r = len(current_mode_str) > 4 and current_mode_str[4] == 'r'
+        group_w = len(current_mode_str) > 5 and current_mode_str[5] == 'w'
+        group_x = len(current_mode_str) > 6 and current_mode_str[6] in ('x', 's', 'S')
+        
+        other_r = len(current_mode_str) > 7 and current_mode_str[7] == 'r'
+        other_w = len(current_mode_str) > 8 and current_mode_str[8] == 'w'
+        other_x = len(current_mode_str) > 9 and current_mode_str[9] in ('x', 't', 'T')
+
+        with ui.dialog() as d, ui.card().classes('w-80 p-0 bg-[#1e293b] border border-slate-700 shadow-2xl overflow-hidden rounded-lg'):
+            # 仿 Mac 顶部标题栏
+            with ui.row().classes('w-full items-center justify-between px-4 py-2 bg-[#111827] border-b border-slate-700'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-[#ff5f56]')
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-[#ffbd2e]')
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-[#27c93f]')
+                    ui.label('修改文件权限').classes('text-xs font-bold text-slate-300 ml-2 tracking-wide')
+                ui.button(icon='close', on_click=d.close).props('flat round dense size=xs color=grey')
+
+            with ui.column().classes('w-full p-5 gap-0'):
+                ui.label(filename).classes('text-xl font-bold text-white mb-4 truncate w-full border-b border-slate-700 pb-2')
+
+                state = {
+                    'owner': {'r': owner_r, 'w': owner_w, 'x': owner_x},
+                    'group': {'r': group_r, 'w': group_w, 'x': group_x},
+                    'other': {'r': other_r, 'w': other_w, 'x': other_x},
+                }
+
+                def make_checkbox_group(title, key):
+                    with ui.column().classes('w-full gap-1 mb-4'):
+                        ui.label(title).classes('text-xs text-slate-400')
+                        with ui.row().classes('w-full gap-6 px-3 py-2 bg-[#0f1724] rounded-md border border-slate-700 items-center justify-start'):
+                            state[key]['r_chk'] = ui.checkbox('读取', value=state[key]['r']).classes('text-sm text-slate-200')
+                            state[key]['w_chk'] = ui.checkbox('写入', value=state[key]['w']).classes('text-sm text-slate-200')
+                            state[key]['x_chk'] = ui.checkbox('执行', value=state[key]['x']).classes('text-sm text-slate-200')
+
+                make_checkbox_group('所有者 (Owner)', 'owner')
+                make_checkbox_group('组 (Group)', 'group')
+                make_checkbox_group('其他 (Others)', 'other')
+
+                async def do_chmod():
+                    calc = lambda k: (4 if state[k]['r_chk'].value else 0) + \
+                                     (2 if state[k]['w_chk'].value else 0) + \
+                                     (1 if state[k]['x_chk'].value else 0)
+                    
+                    new_mode = f"{calc('owner')}{calc('group')}{calc('other')}"
+                    
+                    s_notify = ui.notification(f'正在修改权限为 {new_mode}...', timeout=0, spinner=True)
+                    try:
+                        cmd = f"chmod {new_mode} '{target_path}'"
+                        success, output = await run.io_bound(lambda: _ssh_exec_wrapper(server_conf, cmd))
+                        s_notify.dismiss()
+                        if success:
+                            safe_notify(f'权限已更新: {new_mode}', 'positive')
+                            d.close()
+                            await refresh_remote_dir(file_state['current_path'])
+                        else:
+                            safe_notify(f'修改失败: {output}', 'negative')
+                    except Exception as e:
+                        s_notify.dismiss()
+                        safe_notify(f'修改报错: {e}', 'negative')
+
+                with ui.row().classes('w-full justify-center gap-4 mt-2'):
+                    ui.button('确定', on_click=do_chmod).classes('bg-blue-600 text-white font-bold w-24 rounded-md').props('unelevated')
+                    ui.button('取消', on_click=d.close).classes('bg-[#23314a] text-slate-300 font-bold w-24 rounded-md').props('unelevated')
+
+        d.open()
+
     async def handle_direct_upload(e):
         try:
             remote_path = join_remote_path(file_state['current_path'], e.name)
@@ -1129,6 +1230,16 @@ async def render_single_ssh_view(server_conf):
     def make_delete_handler(entry):
         async def handler(e=None):
             await confirm_delete_entry(entry)
+        return handler
+
+    def make_rename_handler(entry):
+        async def handler(e=None):
+            open_rename_dialog(entry)
+        return handler
+
+    def make_chmod_handler(entry):
+        async def handler(e=None):
+            open_chmod_dialog(entry)
         return handler
 
     @ui.refreshable
@@ -1196,14 +1307,20 @@ async def render_single_ssh_view(server_conf):
                 
                 with ui.row().classes(row_classes) as row:
                     
-                    with ui.context_menu().classes('bg-[#1e293b] text-slate-200 border border-slate-700 text-[13px] font-bold min-w-[120px]'):
+                    with ui.context_menu().classes('bg-[#1e293b] text-slate-200 border border-slate-700 text-[13px] font-bold min-w-[140px]'):
                         if is_dir:
                             ui.menu_item('📂 打开 (Open)', on_click=make_open_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.separator().classes('bg-slate-600')
+                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes('hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
                             ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
                         else:
                             ui.menu_item('📝 打开 / 编辑', on_click=make_edit_handler(item)).classes('hover:bg-slate-700 py-1')
                             ui.menu_item('⬇️ 下载 (Download)', on_click=make_download_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.separator().classes('bg-slate-600')
+                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes('hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
                             ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
                     
