@@ -1495,22 +1495,15 @@ async def render_single_server_view(server_conf, force_refresh=False):
             def get_os_visual(os_name):
                 name = str(os_name or '').lower()
                 if 'ubuntu' in name:
-                    return 'https://cdn.simpleicons.org/ubuntu/E95420', 'Ubuntu'
-                if 'debian' in name:
-                    return 'https://cdn.simpleicons.org/debian/A81D33', 'Debian'
-                if 'centos' in name:
-                    return 'https://cdn.simpleicons.org/centos/8A2BE2', 'CentOS'
-                if 'red hat' in name:
-                    return 'https://cdn.simpleicons.org/redhat/EE0000', 'RedHat'
-                if 'rocky' in name:
-                    return 'https://cdn.simpleicons.org/rockylinux/10B981', 'RockyLinux'
-                if 'alma' in name:
-                    return 'https://cdn.simpleicons.org/almalinux/2563EB', 'AlmaLinux'
-                if 'alpine' in name:
-                    return 'https://cdn.simpleicons.org/alpinelinux/0EA5E9', 'Alpine'
-                if 'arch' in name:
-                    return 'https://cdn.simpleicons.org/archlinux/1793D1', 'ArchLinux'
-                return 'https://cdn.simpleicons.org/linux/FCC624', 'Linux'
+                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0U5NTQyMCI+PHBhdGggZD0iTTExLjk4MyAwYTExLjk3IDExLjk3IDAgMDAtOC45MSAzLjU5M0ExMS45NiAxMS45NiAwIDAwLjA0NiAxMS4wM2EyLjYgMi42IDAgMDAxLjA3NyAyLjM3OGMuMDU4LjA0LjExNi4wODIuMTc2LjEyYTIuNjEzIDIuNjEzIDAgMDAyLjM5NC4wMjUgMi42MjcgMi42MjcgMCAwMDEuMzcxLTEuNjM2IDUuODY1IDUuODY1IDAgMDEwLjE1NS0yLjkwNkE1Ljg1IDUuODUgMCAwMTE2LjU5MyAxNy41YTIuNjM3IDIuNjM3IDAgMDAuNTg0IDEuOTU2IDIuNjEgMi42MSAwIDAwMS45OTYuODgzYy4xMjMgMCAuMjQ4LS4wMS4zNzItLjAzM2EyLjYxNSAyLjYxNSAwIDAwMi4wNDYtMS40NjRBMTEuOTUzIDExLjk1MyAwIDAwMjMuOTU0IDExLjNhMTEuOTY0IDExLjk2NCAwIDAwLTIuODgzLTguM0ExMS45NzUgMTEuOTc1IDAgMDAxMS45ODMgMHptLTUuNDYgNy42MDhhMi41MzYgMi41MzYgMCAwMC0xLjc0OC43NDIgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzYgMi41MzYgMCAwMC0xLjc3Ni0uNzN6bTExLjAxIDQuMzlhMi41MzYgMi41MzYgMCAwMC0xLjc0OC43NDMgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzUgMi41MzUgMCAwMC0xLjc3Ni0uNzN6TTYuNTI0IDE2LjRhMi41MzcgMi41MzcgMCAwMC0xLjc0OC43NDIgMi41MzUgMi41MzUgMCAwMC0uNzMgMS43NzYgMi41NCAyLjU0IDAgMDAuNzQyIDEuNzQ4IDIuNTM1IDIuNTM1IDAgMDAxLjc3Ni43MyAyLjUzNiAyLjUzNiAwIDAwMS43NDgtLjc0MiAyLjUzNSAyLjUzNSAwIDAwLjczLTEuNzc2IDIuNTQgMi41NCAwIDAwLS43NDItMS43NDggMi41MzYgMi41MzYgMCAwMC0xLjc3Ni0uNzN6Ii8+PC9zdmc+'
+                elif 'debian' in name:
+                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0E4MUQzMyI+PHBhdGggZD0iTTEyIDBDNS4zNzMgMCAwIDUuMzczIDAgMTJzNS4zNzMgMTIgMTIgMTIgMTItNS4zNzMgMTItMTJTMTguNjI3IDAgMTIgMHptNi41NDEgMTYuNDY3Yy0uMjEzLjYyNi0uNTI1IDEuMjUyLTEuMDEwIDEuNzM3LS40ODUuNDg1LTEuMTExLjc5OC0xLjczNyAxLjAxLS42MjYuMjEyLTEuMzEzLjMxMy0yLjAyMC4zMTMtLjcwNyAwLTEuMzk0LS4xMDEtMi4wMjAtLjMxMy0uNjI2LS4yMTItMS4yNTItLjUyNS0xLjczNy0xLjAxLS40ODUtLjQ4NS0uNzk4LTEuMTExLTEuMDEwLTEuNzM3LS4yMTItLjYyNi0uMzEzLTEuMzEzLS4zMTMtMi4wMiAwLS43MDcuMTAxLTEuMzk0LjMxMy0yLjAyLjIxMi0uNjI2LjUyNS0xLjI1MiAxLjAxMC0xLjczNy40ODUtLjQ4NSAxLjExMS0uNzk4IDEuNzM3LTEuMDEuNjI2LS4yMTIgMS4zMTMtLjMxMyAyLjAyMC0uMzEzLjcwNyAwIDEuMzk0LjEwMSAyLjAyMC4zMTMuNjI2LjIxMiAxLjI1Mi41MjUgMS43MzcgMS4wMS40ODUuNDg1Ljc5OCAxLjExMSAxLjAxIDEuNzM3LjIxMi42MjYuMzEzIDEuMzEzLjMxMyAyLjAyIDAgLjcwNy0uMTAxIDEuMzk0LS4zMTMgMi4wMnpNMTQuODc1IDExLjk0M2MtLjE2MS0uMjQyLS4zNjMtLjQ2NC0uNTg1LS42NDYtLjIyMi0uMTgyLS40NzQtLjMyMy0uNzQ3LS40MjQtLjI3My0uMTAxLS41NjUtLjE1MS0uODY4LS4xNTEtLjMwMyAwLS41OTUtLjA1Ljg2OC4xNTEtLjI3My4xMDEtLjUyNS4yNDItLjc0Ny40MjQtLjIyMi4xODItLjQyNC40MDQtLjU4NS42NDYtLjE2MS4yNDItLjI4My41MTUtLjM2My44MDgtLjA4MS4yOTMtLjEyMS42MDYtLjEyMS45MjkgMCAuMzIzLjA0LjYzNi4xMjEuOTI5LjA4MS4yOTMuMjAyLjU2NS4zNjMuODA4LjE2MS4yNDIuMzYzLjQ2NC41ODUuNjQ2LjIyMi4xODIuNDc0LjMyMy43NDcuNDI0LjI3My4xMDEtLjU2NS4xNTEtLjg2OC4xNTEtLjMwMyAwLS41OTUtLjA1LS44NjgtLjE1MS0uMjczLS4xMDEtLjUyNS0uMjQyLS43NDctLjQyNC0uMjIyLS4xODItLjQyNC0uNDA0LS41ODUtLjY0Ni0uMTYxLS4yNDItLjI4My0uNTE1LS4zNjMtLjgwOC0uMDgxLS4yOTMtLjEyMS0uNjA2LS4xMjEtLjkyOSAwLS4zMjMtLjA0LS4YzNi0uMTIxLS45MjktLjA4MS0uMjkzLS4yMDItLjU2NS0uMzYzLS44MDh6Ii8+PC9zdmc+'
+                elif 'centos' in name:
+                    return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzI2MjU3NyI+PHBhdGggZD0iTTIyLjU4IDkuMzg5YS41Ni41NiAwIDAwLS40NjItLjE2NmwtNC4wNDYuODE4YTEuNjI4IDEuNjI4IDAgMDAtMS4xMjkgMS4xMjdsLS44MTggNC4wNDVhLjU2LjU2IDAgMDAuMTY1LjQ2M2wyLjk0IDIuOTRjLjI2Mi4yNjMuNzQyLjI1NyAxLjAxNC0uMDE0bDQuMTE3LTQuMTE2Yy4yNy0uMjcxLjI3Ni0uNzUyLjAxNC0xLjAxNHptLTEzLjI1IDguOTlsLS44MTcgNC4wNDVhLjU2LjU2IDAgMDAuMTY1LjQ2M2wyLjkzOSAyLjk0Yy4yNjMuMjYzLjc0Mi4yNTcgMS4wMTQtLjAxNGw0LjExNy00LjExNmMuMjcxLS4yNzEuMjc3LS43NTIuMDE0LTEuMDE0bC0yLjk0LTIuOTM5YS41Ni41NiAwIDAwLS40NjItLjE2NWwtNC4wMzIuODA1em0tNy45MTItMy43NmwuODE4LTQuMDQ1YS41Ni41NiAwIDAwLS4xNjYtLjQ2M2wtMi45NC0yLjkzOWMtLjI2Mi0uMjY0LS43NDItLjI1OC0xLjAxNC4wMTRsLTQuMTE3IDQuMTE2Yy0uMjcwLjI3MS0uMjc2Ljc1Mi0uMDE0IDEuMTAxNGwyLjk0IDIuOTRjLjEyLjEyLjI5OC4xNjguNDYyLjE2NWw0LjAzMi0uODA1em0xMy4yNTEtOC45OWwuODE3LTQuMDQ1YS41Ni41NiAwIDAwLS4xNjUtLjQ2M0wxMi40NjMuMTQyYy0uMjYzLS4yNjMtLjc0Mi0uMjU3LTEuMDE0LjAxNGwtNC4xMTcgNC4xMTZjLS4yNzEuMjc1LS4yNzYuNzUxLS4wMTQgMS4wMTRsMi45NCAyLjk0YS41Ni41NiAwIDAwLjQ2Mi4xNjVsNC4wMzItLjgwNXoiLz48L3N2Zz4='
+                elif 'alpine' in name:
+                     return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzBFQTVFOSI+PHBhdGggZD0iTTIyLjE4MyA1Ljg1MWMtLjUwNC0uNDQ0LTEuMjU4LS40OC0xLjcyMi0uMDkzbC01LjgxIDQuODM0LS4xMzItLjA0LTMuMjUzLTMuNTVhMS4zMiAxLjMyIDAgMDAtMS42NTMtLjE4NUwyLjExNyAxMi4xMTNhMS4yODYgMS4yODYgMCAwMC0uMjA5IDEuOTQxbDEyLjQzNiAxMC4wMGEyLjM1NSAyLjM1NSAwIDAwMS40MTIuNDg1aDYuMTMyYy44NjQgMCAxLjU2Ni0uNzI5IDEuNDc4LTEuNTg4TDIyLjE4MyA1Ljg1MXptLTE1LjA3NCA5LjMyTDEwLjc5IDkuMDk4bDMuNTMgMy44NTFhLjE2LjE2IDAgMDAuMTA2LjA2MmwyLjg2My44NjhhLjEyNS4xMjUgMCAwMTAuMTk2TDIuODcgMjEuMzQyIDEuOTEzIDEyLjExMmEuMjUuMjUgMCAwMS4wMzMtLjM2NGw1LjE2My00LjE2OQoicC8+PC9zdmc+'
+                
+                return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI0ZDQzYyNCI+PHBhdGggZD0iTTExLjggMTFDOS41MyAxMSA3LjcgMTIuNjIgNy43IDE0LjYyYy0xLjQyLS4wNC0yLjczLjI4LTMuNDEgMS4xNS0uNzYuOTQtLjUxIDIuNTEuNDggMy40NSAxLjEyLDEuMDYgMy4xNCAxLjMzIDQuOTEgMS4yLS4yLjA0LS40LjA5LS42Mi4xNC0xLjU1LjM4LTEuNjQgMS44Ni0xLjYzIDIuNjEuMDEuNzcuNjUgMS4zNiAxLjQ1IDEuMTRsMi42OC0uNTVhNS40IDUuNCAwIDAgMCA0LjUtMi4yNWMuNS0uOC44LTEuNjYuODQtMi41OS4xMi0uMTEuMjMtLjI1LjMyLS4zOS45NC0xLjM2IDEuMjYtMy4zNC41Ni00LjM5LS44Ny0xLjMxLTIuODQtMS4yNi00LjUxLTEuMDkuMDEtMS45OC0xLjgxLTMuNjMtNC4wNi0zLjYzem00IDAuOTJhMS40NiAxLjQ2IDAgMCAxIDEuNDUgMS40NyAxLjQ2IDEuNDYgMCAwIDEtMS40NSAxLjQ3IDEuNDYgMS40NiAwIDAgMS0xLjQ1LTEuNDcgMS40NiAxLjQ2IDAgMCAxIDEuNDUtMS40N3oiLz48L3N2Zz4='
 
             def format_arch_text(arch_value):
                 value = str(arch_value or '--').strip().lower()
@@ -1656,7 +1649,7 @@ PY'''
                     for n in all_nodes:
                         is_custom = n.get('_is_custom', False)
                         is_ssh_mode = (not is_custom) and (server_conf.get('probe_installed') and server_conf.get('ssh_host'))
-                        row_3d_cls = 'grid w-full gap-4 py-3 px-2 mb-2 items-center group bg-[#1e293b] rounded-xl border border-slate-700 border-b-[3px] shadow-sm transition-all duration-150 ease-out hover:shadow-md hover:border-blue-50 hover:bg-[#252f45] active:border-b active:translate-y-[2px] active:shadow-none cursor-default'
+                        row_3d_cls = 'grid w-full gap-4 py-3 px-2 mb-2 items-center group bg-[#1e293b] rounded-xl border border-slate-700 border-b-[3px] shadow-sm transition-all duration-150 ease-out hover:shadow-md hover:border-blue-500 hover:bg-[#252f45] active:border-b active:translate-y-[2px] active:shadow-none cursor-default'
                         with ui.element('div').classes(row_3d_cls).style(SINGLE_COLS_NO_PING):
                             ui.label(n.get('remark', '未命名')).classes('font-bold truncate w-full text-left pl-2 text-slate-300 text-sm group-hover:text-white')
                             if is_custom:
@@ -1811,9 +1804,16 @@ PY'''
                         with ui.row().classes('items-center gap-3 no-wrap'):
                             ui.label(server_conf.get('name', '未命名服务器')).classes('text-xl font-black text-slate-200 leading-tight tracking-tight')
                         with ui.row().classes('items-center gap-2 flex-wrap'):
-                            # ----- Detail Page Top Left: Reverted back to just display the IP / Domain configured -----
-                            ip_addr = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
-                            ui.label(ip_addr).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
+                            raw_host = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
+                            display_ip = raw_host
+                            if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
+                                try:
+                                    # SSH页面加载时同步等待一次 DNS 解析，让界面立刻显示 IP
+                                    display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
+                                except:
+                                    display_ip = raw_host
+
+                            ui.label(display_ip).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
                             
                             @ui.refreshable
                             def live_status_badge():
@@ -1863,7 +1863,7 @@ PY'''
                         with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
                             
                             with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                                os_logo_url, _ = get_os_visual(snapshot['os'])
+                                os_logo_url = get_os_visual(snapshot['os'])
                                 
                                 cores = snapshot.get('cpu_cores')
                                 core_label = f"{cores} C" if cores else ""
@@ -1877,7 +1877,7 @@ PY'''
                                 )
                                 
                                 with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm transition-all hover:bg-slate-800/60 flex-nowrap'):
-                                    ui.image(os_logo_url).classes('w-6 h-6 object-contain shrink-0')
+                                    ui.html(f'<img src="{os_logo_url}" class="w-6 h-6 object-contain shrink-0" style="display:inline-block;" />')
                                     ui.label(snapshot['os']).classes('text-sm font-black text-slate-50 truncate')
                                 
                                 with ui.column().classes('w-full gap-3 flex-1 justify-center mt-1'):
@@ -1952,52 +1952,52 @@ PY'''
                                     ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
                                     ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
-                render_vps_info_cards()
-                
-                def safe_refresh():
-                    try:
-                        if not vps_container.is_deleted:
-                            render_sync_status.refresh()
-                            render_vps_info_cards.refresh()
-                    except:
-                        pass
-                
-                ui.timer(2.0, safe_refresh)
+            render_vps_info_cards()
+            
+            def safe_refresh():
+                try:
+                    if not vps_container.is_deleted:
+                        render_sync_status.refresh()
+                        render_vps_info_cards.refresh()
+                except:
+                    pass
+            
+            ui.timer(2.0, safe_refresh)
 
-            ui.element('div').classes('h-6 flex-shrink-0')
+        ui.element('div').classes('h-6 flex-shrink-0')
 
-            with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
-                with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
-                        if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
-                            ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
-                        elif server_conf.get('user'):
-                            ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
-                    with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
-                        from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
+        with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
+            with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
+                    if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
+                        ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
+                    elif server_conf.get('user'):
+                        ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
+                with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
+                    from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
 
-                        ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                        ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                        ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
-                        if has_manager_access:
-                            async def on_add_success():
-                                ui.notify('添加节点成功')
-                                await reload_and_refresh_ui()
-                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
-                        else:
-                            ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
+                    ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                    if has_manager_access:
+                        async def on_add_success():
+                            ui.notify('添加节点成功')
+                            await reload_and_refresh_ui()
+                        ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
+                    else:
+                        ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
-                with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
-                    ui.label('节点名称').classes('text-left pl-2')
-                    for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
-                        ui.label(h).classes('text-center')
+            with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
+                ui.label('节点名称').classes('text-left pl-2')
+                for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
+                    ui.label(h).classes('text-center')
 
-                with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
-                    await render_node_list()
+            with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
+                await render_node_list()
 
-            if has_manager_access and not NODES_DATA.get(server_conf['url']):
-                ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
+        if has_manager_access and not NODES_DATA.get(server_conf['url']):
+            ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
 
 
 async def render_aggregated_view(server_list, show_ping=False, token=None, initial_page=1):
