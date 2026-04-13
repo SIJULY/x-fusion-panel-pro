@@ -226,11 +226,15 @@ class InboundEditor:
     def ui(self, dlg):
         with ui.card().classes('w-full max-w-5xl p-6 flex flex-col gap-4 overflow-auto'):
             title = '编辑节点' if self.is_edit else '新建节点'
-            with ui.row().classes('justify-between items-center'):
-                ui.label(title).classes('text-xl font-bold')
-                with ui.row().classes('items-center gap-2'):
+            
+            # --- 关键修改位置：调整标题、开关与关闭按钮的层级布局 ---
+            with ui.row().classes('w-full justify-between items-center mb-2'):
+                # 左侧：标题 + 启用开关
+                with ui.row().classes('items-center gap-4'):
+                    ui.label(title).classes('text-xl font-bold')
                     self.ena = ui.switch('启用', value=self.d.get('enable', True))
-                    ui.button(icon='close', on_click=dlg.close).props('flat round dense color=grey')
+                # 右侧：独立的关闭按钮（自动靠到右上角）
+                ui.button(icon='close', on_click=dlg.close).props('flat round dense color=grey')
 
             with ui.row().classes('w-full gap-4'):
                 self.rem = ui.input('节点名称', value=self.d.get('remark')).classes('flex-grow')
