@@ -1506,7 +1506,6 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
         ssh_fallback_data = {}
         
-        # 页面加载时执行且仅执行一次极轻量级的后台 SSH 抓取，补齐内存缓存中可能缺失的静态数据
         def _fetch_runtime_via_ssh():
             if not server_conf.get('ssh_host'):
                 return None
@@ -1565,14 +1564,12 @@ PY'''
             if isinstance(remote_data, dict):
                 ssh_fallback_data.update(remote_data)
 
-        # 触发一次抓取
         ui.timer(0.1, run_ssh_fallback, once=True)
 
         def get_cached_snapshot():
             probe_cache = PROBE_DATA_CACHE.get(server_conf['url'], {}) or {}
             static = probe_cache.get('static', {}) or {}
             
-            # 使用静态探针数据或 SSH Fallback 数据
             mem_total = to_float(probe_cache.get('mem_total', 0.0))
             mem_usage_pct = clamp_percent(probe_cache.get('mem_usage', 0.0))
             mem_used = round(mem_total * mem_usage_pct / 100.0, 2)
@@ -1881,11 +1878,31 @@ PY'''
                                 render_metric_row('在线运行时间', snapshot.get('uptime', '--'), value_color='text-emerald-400')
 
                         with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                            render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"已用：{snapshot['mem_usage_pct']:.0f}%").classes('text-sm font-black text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
+                            render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"{fmt_gb(snapshot['mem_total_gb'])}").classes('text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20'))
                             with ui.column().classes('w-full flex-1 gap-3 justify-center mt-1'):
-                                render_metric_row('系统总内存', fmt_gb(snapshot['mem_total_gb']), value_color='text-slate-200')
-                                render_metric_row('空闲内存', fmt_gb(snapshot['mem_free_gb']), value_color='text-emerald-400')
-                                render_metric_row('真实使用内存', fmt_gb(snapshot['mem_used_gb']), value_color='text-amber-400')
+                                
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('真实使用内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    
+                                    pct = snapshot.get('mem_usage_pct', 0.0)
+                                    val = fmt_gb(snapshot['mem_used_gb'])
+                                    bar_color = 'bg-amber-500/80' if pct > 80 else 'bg-blue-500/80'
+                                    
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
+                                        ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('空闲内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    
+                                    free_pct = 100.0 - pct if pct > 0 else 100.0
+                                    val = fmt_gb(snapshot['mem_free_gb'])
+                                    bar_color = 'bg-emerald-500/80'
+                                    
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
+                                        ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+
                                 render_metric_row('系统缓存', fmt_gb(snapshot['mem_cache_gb']), value_color='text-teal-400')
                                 render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snapshot['swap_used_gb'])} / {fmt_gb(snapshot['swap_total_gb'])}", f"剩余 {fmt_gb(snapshot['swap_free_gb'])} · 使用率 {snapshot['swap_usage_pct']:.0f}%", value_color='text-purple-400')
 
