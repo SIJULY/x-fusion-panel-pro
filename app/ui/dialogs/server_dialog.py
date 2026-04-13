@@ -4,6 +4,7 @@ import time
 import uuid
 import tempfile
 import os
+import socket
 import time as time_module
 import base64
 
@@ -58,6 +59,13 @@ echo "Xray Service Uninstalled (Binary kept safe)"
 SSH_DIALOG_STATES = {}
 SSH_PAGE_TERMINALS = {}
 SSH_DIALOG_OPEN_COOLDOWN = 1.2
+
+
+def _sync_resolve_ip(host):
+    try:
+        return socket.gethostbyname(host)
+    except:
+        return host
 
 
 async def save_server_config(server_data, is_add=True, idx=None):
@@ -937,7 +945,7 @@ async def render_single_ssh_view(server_conf):
                             ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
                             ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
 
-                    ui.element('div').props('id="monaco-container"').classes('w-full relative bg-[#1e293b]').style('flex: 1 1 auto; min-height: 0;')
+                    ui.element('div').props('id="monaco-container"').classes('w-full relative flex-grow bg-[#1e293b]').style('min-height: 0;')
                     
                     def on_sync(e):
                         if editor_state['active_path']:
@@ -1361,58 +1369,57 @@ async def render_single_ssh_view(server_conf):
                 row.on('dblclick', make_open_handler(item))
 
     with content_container:
-        with ui.column().classes('w-full max-w-[1440px] mx-auto h-full flex flex-col gap-0 flex-nowrap'):
-            with ui.card().classes('w-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
-                with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
-                    with ui.row().classes('items-center gap-3'):
-                        ui.icon('terminal').classes('text-green-400')
-                        with ui.column().classes('gap-0'):
-                            ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-slate-100 font-bold')
-                            ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
-                    with ui.row().classes('items-center gap-2'):
-                        ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props('outline color=grey').classes('text-slate-200')
+        with ui.card().classes('w-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
+            with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
+                with ui.row().classes('items-center gap-3'):
+                    ui.icon('terminal').classes('text-green-400')
+                    with ui.column().classes('gap-0'):
+                        ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{server_conf.get('ssh_host') or 'IP'}").classes('text-slate-100 font-bold')
+                        ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
+                with ui.row().classes('items-center gap-2'):
+                    ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props('outline color=grey').classes('text-slate-200')
 
-                with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
-                    with ui.row().classes('items-center gap-2'):
-                        ui.badge('独立路由终端', color='green').props('outline rounded')
-                        ui.badge('交互模式', color='blue').props('outline rounded')
-                    ui.label('SSH 终端与文件管理已分区显示').classes('text-xs text-slate-400')
+            with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
+                with ui.row().classes('items-center gap-2'):
+                    ui.badge('独立路由终端', color='green').props('outline rounded')
+                    ui.badge('交互模式', color='blue').props('outline rounded')
+                ui.label('SSH 终端与文件管理已分区显示').classes('text-xs text-slate-400')
 
-                terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style('height: 420px; min-height: 420px; position: relative;')
-                with terminal_box:
-                    with ui.column().classes('w-full h-full items-center justify-center text-slate-500'):
-                        ui.label('正在初始化 SSH 终端...').classes('text-sm')
+            terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style('height: 420px; min-height: 420px; position: relative;')
+            with terminal_box:
+                with ui.column().classes('w-full h-full items-center justify-center text-slate-500'):
+                    ui.label('正在初始化 SSH 终端...').classes('text-sm')
 
-            with ui.card().classes('w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
-                render_quick_commands()
+        with ui.card().classes('w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
+            render_quick_commands()
 
-            with ui.card().classes('w-full h-[46vh] min-h-[420px] p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
+        with ui.card().classes('w-full h-[46vh] min-h-[420px] p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
 
-                with ui.row().classes('w-full items-center justify-between px-3 py-2 bg-[#131d2d] border-b border-slate-700 gap-2 flex-nowrap'):
-                    path_input = ui.input(value=file_state['current_path']).classes('flex-grow text-xs h-8 min-w-[200px]').props('dense outlined dark bg-color="slate-900"')
+            with ui.row().classes('w-full items-center justify-between px-3 py-2 bg-[#131d2d] border-b border-slate-700 gap-2 flex-nowrap'):
+                path_input = ui.input(value=file_state['current_path']).classes('flex-grow text-xs h-8 min-w-[200px]').props('dense outlined dark bg-color="slate-900"')
+                
+                with ui.row().classes('items-center gap-1 flex-nowrap no-wrap'):
+                    ui.button('历史').props('outline dense size=sm color=grey').classes('h-7 text-slate-400 border-slate-600 hidden sm:block')
+                    ui.button(icon='refresh', on_click=lambda: refresh_remote_dir(file_state['current_path'])).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('刷新')
+                    ui.button(icon='arrow_upward', on_click=go_parent_dir).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('返回上级')
                     
-                    with ui.row().classes('items-center gap-1 flex-nowrap no-wrap'):
-                        ui.button('历史').props('outline dense size=sm color=grey').classes('h-7 text-slate-400 border-slate-600 hidden sm:block')
-                        ui.button(icon='refresh', on_click=lambda: refresh_remote_dir(file_state['current_path'])).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('刷新')
-                        ui.button(icon='arrow_upward', on_click=go_parent_dir).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('返回上级')
+                    hidden_uploader = ui.upload(on_upload=handle_direct_upload, multiple=True).props('auto-upload').style('display: none;')
+                    ui.button(
+                        icon='file_upload', 
+                        on_click=lambda: ui.run_javascript(f'document.getElementById("c{hidden_uploader.id}").querySelector("input[type=file]").click()')
+                    ).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('上传文件')
+
+                    ui.button(icon='create_new_folder', on_click=lambda: open_create_dialog('dir')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-green-400').tooltip('新建目录')
+                    ui.button(icon='note_add', on_click=lambda: open_create_dialog('file')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-blue-400').tooltip('新建文件')
+
+            with ui.row().classes('w-full min-h-0 flex-grow flex-nowrap no-wrap gap-0'):
+                with ui.column().classes('w-[25%] min-w-[150px] h-full border-r border-[#223048] bg-[#0f1724]'):
+                    with ui.scroll_area().classes('w-full h-full'):
+                        render_tree()
                         
-                        hidden_uploader = ui.upload(on_upload=handle_direct_upload, multiple=True).props('auto-upload').style('display: none;')
-                        ui.button(
-                            icon='file_upload', 
-                            on_click=lambda: ui.run_javascript(f'document.getElementById("c{hidden_uploader.id}").querySelector("input[type=file]").click()')
-                        ).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('上传文件')
-
-                        ui.button(icon='create_new_folder', on_click=lambda: open_create_dialog('dir')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-green-400').tooltip('新建目录')
-                        ui.button(icon='note_add', on_click=lambda: open_create_dialog('file')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-blue-400').tooltip('新建文件')
-
-                with ui.row().classes('w-full min-h-0 flex-grow flex-nowrap no-wrap gap-0'):
-                    with ui.column().classes('w-[25%] min-w-[150px] h-full border-r border-[#223048] bg-[#0f1724]'):
-                        with ui.scroll_area().classes('w-full h-full'):
-                            render_tree()
-                            
-                    with ui.column().classes('w-[75%] h-full bg-[#0d1524]'):
-                        with ui.scroll_area().classes('w-full h-full'):
-                            render_file_list()
+                with ui.column().classes('w-[75%] h-full bg-[#0d1524]'):
+                    with ui.scroll_area().classes('w-full h-full'):
+                        render_file_list()
 
     logger.info(f"[SingleSSHRoute] page opened | key={server_key}")
     
@@ -1793,8 +1800,15 @@ PY'''
                         with ui.row().classes('items-center gap-3 no-wrap'):
                             ui.label(server_conf.get('name', '未命名服务器')).classes('text-xl font-black text-slate-200 leading-tight tracking-tight')
                         with ui.row().classes('items-center gap-2 flex-wrap'):
-                            ip_addr = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
-                            ui.label(ip_addr).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
+                            raw_host = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
+                            display_ip = raw_host
+                            if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
+                                try:
+                                    display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
+                                except:
+                                    display_ip = raw_host
+
+                            ui.label(display_ip).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
                             
                             @ui.refreshable
                             def live_status_badge():
