@@ -425,7 +425,53 @@ async def open_server_dialog(idx=None):
                 with ui.row().classes('w-full gap-2'):
                     inputs['xui_user'] = ui.input(value=data.get('user', ''), label='账号').classes('flex-1').props('outlined dense')
                     inputs['xui_pass'] = ui.input(value=data.get('pass', ''), label='密码', password=True).classes('flex-1').props('outlined dense')
-                inputs['xui_prefix'] = ui.input(value=data.get('prefix', ''), label='面板根路径 (选填)').classes('w-full').props('outlined dense')
+                
+                # --- 修复手动探测按钮 ---
+                with ui.row().classes('w-full gap-2 items-center no-wrap'):
+                    inputs['xui_prefix'] = ui.input(value=data.get('prefix', ''), label='面板根路径 (选填)').classes('flex-1 min-w-0').props('outlined dense')
+                    
+                    async def auto_detect_path():
+                        s_host = inputs.get('ssh_host').value if 'ssh_host' in inputs else data.get('ssh_host')
+                        s_user = inputs.get('ssh_user').value if 'ssh_user' in inputs else data.get('ssh_user')
+                        s_port = inputs.get('ssh_port').value if 'ssh_port' in inputs else data.get('ssh_port')
+                        s_pwd = inputs.get('ssh_pwd').value if 'ssh_pwd' in inputs else data.get('ssh_password')
+                        s_key = inputs.get('ssh_key').value if 'ssh_key' in inputs else data.get('ssh_key')
+                        s_auth = inputs.get('auth_type').value if 'auth_type' in inputs else data.get('ssh_auth_type', '全局密钥')
+                        
+                        if not s_host:
+                            safe_notify('请先在左侧【SSH / 探针】配置好服务器 IP', 'warning')
+                            return
+                            
+                        temp_conf = {
+                            'ssh_host': s_host, 'ssh_user': s_user or 'root', 'ssh_port': s_port or '22',
+                            'ssh_password': s_pwd, 'ssh_key': s_key, 'ssh_auth_type': s_auth
+                        }
+                        
+                        detect_script = r'''python3 - <<'PY'
+import sqlite3, os
+xui_path = ""
+for p in ['/etc/x-ui/x-ui.db', '/usr/local/x-ui/bin/x-ui.db', '/usr/local/x-ui/x-ui.db']:
+    if os.path.exists(p):
+        try:
+            res = sqlite3.connect(p).cursor().execute("SELECT value FROM settings WHERE key='webBasePath'").fetchone()
+            if res and res[0]: xui_path = res[0].strip('/')
+            break
+        except: pass
+print(xui_path)
+PY'''
+                        s_notify = ui.notification('正在通过 SSH 探测路径...', timeout=0, spinner=True)
+                        success, output = await run.io_bound(lambda: _ssh_exec_wrapper(temp_conf, detect_script))
+                        s_notify.dismiss()
+                        
+                        if success:
+                            detected = output.strip().strip('/')
+                            inputs['xui_prefix'].value = f"/{detected}" if detected else ""
+                            safe_notify('✅ 路径提取成功', 'positive')
+                        else:
+                            safe_notify('⚠️ 探测失败，请检查 SSH', 'warning')
+
+                    ui.button(icon='travel_explore', on_click=auto_detect_path).props('flat bg-purple-50 text-purple-600').tooltip('一键探测面板路径').classes('px-3')
+
                 ui.separator().classes('my-1')
                 with ui.row().classes('w-full justify-between items-center'):
                     inputs['probe_chk'] = ui.checkbox('启用 Root 探针', value=data.get('probe_installed', False))
