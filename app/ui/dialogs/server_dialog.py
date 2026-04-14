@@ -1,12 +1,5 @@
 import asyncio
-import json
-import time
-import uuid
-import tempfile
-import os
 import socket
-import time as time_module
-import base64
 
 from nicegui import run, ui
 
@@ -19,25 +12,16 @@ from app.core.state import (
     NODES_DATA,
     PING_TREND_CACHE,
     PROBE_DATA_CACHE,
-    REFRESH_CURRENT_NODES,
     SERVERS_CACHE,
     SIDEBAR_UI_REFS,
 )
-from app.services.cloudflare import CloudflareHandler
-from app.services.manager_factory import get_manager
 from app.services.probe import install_probe_on_server
 from app.services.server_ops import fast_resolve_single_server, generate_smart_name
-from app.services.ssh import WebSSH, _ssh_exec_wrapper, get_ssh_client_sync
-from app.services.subscriptions import copy_group_link
-from app.services.xui_fetch import fetch_inbounds_safe
-from app.storage.repositories import save_admin_config, save_nodes_cache, save_servers
-from app.ui.common.notifications import safe_copy_to_clipboard, safe_notify
+from app.services.ssh import _ssh_exec_wrapper
+from app.storage.repositories import save_servers
+from app.ui.common.notifications import safe_notify
 from app.ui.components.dashboard import refresh_dashboard_ui
-from app.ui.components.server_rows import draw_row
 from app.ui.components.sidebar import render_sidebar_content, render_single_sidebar_row
-from app.ui.dialogs.inbound_dialog import delete_inbound_with_confirm, open_inbound_dialog
-from app.utils.encoding import generate_detail_config, generate_node_link
-from app.utils.formatters import format_bytes, smart_sort_key
 from app.utils.geo import detect_country_group
 
 
@@ -56,9 +40,7 @@ echo "Xray Service Uninstalled (Binary kept safe)"
 """
 
 
-SSH_DIALOG_STATES = {}
 SSH_PAGE_TERMINALS = {}
-SSH_DIALOG_OPEN_COOLDOWN = 1.2
 
 
 def _sync_resolve_ip(host):
