@@ -31,11 +31,9 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
     if content_container:
         content_container.clear()
-        # 强制接管路由容器样式：禁止它自己滚动，改为 100% 弹性填满
         content_container.classes(remove='overflow-y-auto block justify-start', add='h-full flex-1 min-h-0 overflow-hidden flex flex-col p-4')
 
     with content_container:
-        # 【终极修复 1】：追加 min-h-[calc(100vh-130px)] 强制兜底高度，无论如何也要撑到屏幕最底部！
         with ui.element('div').classes('w-full max-w-[1440px] mx-auto h-full flex-1 min-h-[calc(100vh-130px)] flex flex-col gap-0 flex-nowrap'):
             has_manager_access = (server_conf.get('url') and server_conf.get('user') and server_conf.get('pass')) or (server_conf.get('probe_installed') and server_conf.get('ssh_host'))
             mgr = None
@@ -114,6 +112,7 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
             ssh_fallback_data = {}
 
+            # --- 核心改动：把耗时 1~3 秒的 SSH 扫描完全解耦到独立后台任务中，保证页面瞬间渲染 ---
             def _fetch_runtime_via_ssh():
                 if not server_conf.get('ssh_host'):
                     return None
@@ -141,17 +140,31 @@ try:
         uptime_text = f'{d}天 {h}时 {m}分'
     except:
         pass
+        
+    xui_path = None
+    import sqlite3
+    for p in ['/etc/x-ui/x-ui.db', '/usr/local/x-ui/bin/x-ui.db', '/usr/local/x-ui/x-ui.db']:
+        if os.path.exists(p):
+            try:
+                conn = sqlite3.connect(p)
+                res = conn.execute("SELECT value FROM settings WHERE key='webBasePath'").fetchone()
+                if res and res[0]: xui_path = res[0].strip('/')
+                conn.close()
+                if xui_path: break
+            except: pass
+
     info = {
         'os': pretty,
         'arch': platform.machine(),
         'cpu_cores': multiprocessing.cpu_count(),
-        'uptime': uptime_text
+        'uptime': uptime_text,
+        'xui_path': xui_path
     }
 except Exception as e:
     info = {'error': str(e)}
 print(json.dumps(info, ensure_ascii=False))
 PY'''
-                    stdin, stdout, stderr = client.exec_command(remote_script, timeout=20)
+                    stdin, stdout, stderr = client.exec_command(remote_script, timeout=15)
                     raw = stdout.read().decode('utf-8', errors='ignore').strip()
                     if raw:
                         parsed = json.loads(raw.splitlines()[-1])
@@ -170,7 +183,18 @@ PY'''
                 remote_data = await run.io_bound(_fetch_runtime_via_ssh)
                 if isinstance(remote_data, dict):
                     ssh_fallback_data.update(remote_data)
+                    
+                    # 发现路径后立刻修正、静默保存，并异步刷新节点列表
+                    if 'xui_path' in remote_data:
+                        detected_prefix = f"/{remote_data['xui_path']}" if remote_data['xui_path'] else ""
+                        if server_conf.get('prefix') != detected_prefix:
+                            server_conf['prefix'] = detected_prefix
+                            asyncio.create_task(save_servers())
+                            logger.info(f"[AutoDetect] Server path automatically self-healed to: '{detected_prefix}'")
+                            if has_manager_access:
+                                asyncio.create_task(reload_and_refresh_ui())
 
+            # 核心：使用 ui.timer 让 SSH 探测进入后台，绝不阻塞当前 UI 线程
             ui.timer(0.1, run_ssh_fallback, once=True)
 
             def get_cached_snapshot():
@@ -227,18 +251,14 @@ PY'''
                 if not server_conf.get('ssh_host'):
                     safe_notify('当前服务器未配置 SSH 主机，无法打开终端', 'warning')
                     return
-                try:
-                    client = ui.context.client
-                except:
-                    client = None
-                logger.info(f"[SingleSSHRoute] navigate requested | key={server_dialog_key} client_present={client is not None}")
+                try: client = ui.context.client
+                except: client = None
                 asyncio.create_task(refresh_content('SSH_SINGLE', server_conf, manual_client=client))
 
             @ui.refreshable
             async def render_node_list():
                 xui_nodes = await fetch_inbounds_safe(server_conf, force_refresh=False)
-                if xui_nodes is None:
-                    xui_nodes = []
+                if xui_nodes is None: xui_nodes = []
                 custom_nodes = server_conf.get('custom_nodes', [])
                 all_nodes = xui_nodes + custom_nodes
 
@@ -310,13 +330,10 @@ PY'''
                             NODES_DATA[server_conf['url']] = new_inbounds
                             server_conf['_status'] = 'online'
                             await save_nodes_cache()
-                    except Exception as e:
-                        logger.error(f'SSH 强制刷新失败: {e}')
+                    except: pass
                 else:
-                    try:
-                        await fetch_inbounds_safe(server_conf, force_refresh=True)
-                    except:
-                        pass
+                    try: await fetch_inbounds_safe(server_conf, force_refresh=True)
+                    except: pass
                 render_node_list.refresh()
 
             REFRESH_CURRENT_NODES = reload_and_refresh_ui
@@ -342,53 +359,16 @@ PY'''
                     with ui.row().classes('items-center gap-2 text-red-600 mb-2'):
                         ui.icon('delete_forever', size='md')
                         ui.label('卸载并清理环境').classes('font-bold text-lg')
-                    ui.label(f"节点: {node_data.get('remark')}").classes('text-sm font-bold text-gray-800')
-                    ui.label('即将执行以下操作：').classes('text-xs text-gray-500 mt-2')
-
-                    domain_to_del = None
-                    raw_link = node_data.get('_raw_link', '')
-                    if raw_link and '://' in raw_link:
-                        try:
-                            from urllib.parse import parse_qs, urlparse
-                            query = urlparse(raw_link).query
-                            params = parse_qs(query)
-                            if 'sni' in params:
-                                domain_to_del = params['sni'][0]
-                            elif 'host' in params:
-                                domain_to_del = params['host'][0]
-                        except:
-                            pass
-
-                    with ui.column().classes('ml-2 gap-1 mt-1'):
-                        ui.label('1. 停止 Xray 服务并清除残留进程').classes('text-xs text-gray-600')
-                        ui.label('2. 删除 Xray 配置文件').classes('text-xs text-gray-600')
-                        if domain_to_del and ADMIN_CONFIG.get('cf_root_domain') in domain_to_del:
-                            ui.label(f'3. 🗑️ 自动删除 CF 解析: {domain_to_del}').classes('text-xs text-red-500 font-bold')
-                        else:
-                            ui.label('3. 跳过 DNS 清理 (非托管域名)').classes('text-xs text-gray-400')
-
                     async def start_uninstall():
                         d.close()
                         notification = ui.notification(message='正在执行卸载与清理...', timeout=0, spinner=True)
-                        if domain_to_del:
-                            cf = CloudflareHandler()
-                            if cf.token and cf.root_domain and (cf.root_domain in domain_to_del):
-                                ok, msg = await cf.delete_record_by_domain(domain_to_del)
-                                if ok:
-                                    safe_notify(f'☁️ {msg}', 'positive')
-                                else:
-                                    safe_notify(f'⚠️ DNS 删除失败: {msg}', 'warning')
                         success, output = await run.io_bound(lambda: _ssh_exec_wrapper(server_conf, XHTTP_UNINSTALL_SCRIPT))
                         notification.dismiss()
-                        if success:
-                            safe_notify('✅ 服务已卸载，进程已清理', 'positive')
-                        else:
-                            safe_notify(f'⚠️ SSH 卸载可能有残留: {output}', 'warning')
+                        if success: safe_notify('✅ 服务已卸载，进程已清理', 'positive')
                         if 'custom_nodes' in server_conf and node_data in server_conf['custom_nodes']:
                             server_conf['custom_nodes'].remove(node_data)
                             await save_servers()
                         await reload_and_refresh_ui()
-
                     with ui.row().classes('w-full justify-end mt-6 gap-2'):
                         ui.button('取消', on_click=d.close).props('flat color=grey')
                         ui.button('确认执行', color='red', on_click=start_uninstall).props('unelevated')
@@ -408,191 +388,103 @@ PY'''
                             ui.label(server_conf.get('name', '未命名服务器')).classes('text-xl font-black text-slate-200 leading-tight tracking-tight')
                         with ui.row().classes('items-center gap-2 flex-wrap'):
                             raw_host = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
-                            display_ip = raw_host
-                            if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
-                                try:
-                                    display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
-                                except:
-                                    display_ip = raw_host
-
-                            ui.label(display_ip).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
-
+                            ui.label(raw_host).classes('text-xs font-mono font-bold text-slate-400 bg-[#0f172a] px-2 py-0.5 rounded border border-slate-700')
                             @ui.refreshable
                             def live_status_badge():
                                 import time as _time
                                 is_online = False
                                 now_ts = _time.time()
                                 probe_cache = PROBE_DATA_CACHE.get(server_conf['url'])
-                                probe_alive = probe_cache and (now_ts - probe_cache.get('last_updated', 0) < 20)
-
-                                if probe_alive:
-                                    is_online = True
-                                elif server_conf.get('probe_installed'):
-                                    is_online = False
-                                elif server_conf.get('_status') == 'online':
-                                    is_online = True
-
-                                if is_online:
-                                    ui.badge('Online', color='green').props('rounded outline size=xs')
-                                else:
-                                    ui.badge('Offline', color='grey').props('rounded outline size=xs')
-
+                                if probe_cache and (now_ts - probe_cache.get('last_updated', 0) < 20): is_online = True
+                                elif server_conf.get('_status') == 'online': is_online = True
+                                ui.badge('Online' if is_online else 'Offline', color='green' if is_online else 'grey').props('rounded outline size=xs')
                             live_status_badge()
                             ui.timer(3.0, live_status_badge.refresh)
-
                 with ui.row().classes('items-center justify-end'):
                     if server_conf.get('ssh_host'):
                         ui.button('进入 SSH 终端', icon='terminal', on_click=open_ssh_page).props('flat round size=sm color=green').classes('bg-[#0f172a] border border-slate-700 shadow-md px-4 py-2 font-bold')
 
             ui.element('div').classes('h-4 flex-shrink-0')
 
-            vps_container = ui.column().classes('w-full flex-shrink-0 p-0 gap-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col')
-
+            vps_container = ui.element('div').classes('w-full flex-shrink-0 p-0 gap-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col')
             with vps_container:
                 with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#0f172a]'):
                     with ui.row().classes('items-center gap-2'):
                         ui.icon('monitor_heart').classes('text-cyan-400')
                         ui.label('VPS 运行信息').classes('text-sm font-black text-slate-300 uppercase tracking-wide')
-
                     @ui.refreshable
                     def render_sync_status():
                         import time as _time
                         probe_cache = PROBE_DATA_CACHE.get(server_conf['url'])
-                        if probe_cache:
-                            if (_time.time() - probe_cache.get('last_updated', 0)) > 20:
-                                ui.label('🔴 探针已断联 (离线)').classes('text-xs text-red-500 font-bold tracking-wide')
-                            else:
-                                ui.label('🟢 探针实时同步中').classes('text-xs text-emerald-400 font-bold tracking-wide shadow-emerald-400/50')
+                        if probe_cache and (_time.time() - probe_cache.get('last_updated', 0)) <= 20:
+                            ui.label('🟢 探针实时同步中').classes('text-xs text-emerald-400 font-bold tracking-wide')
                         else:
-                            ui.label('⚪ 等待探针数据').classes('text-xs text-slate-500 font-bold')
+                            ui.label('🔴 探针已断联 (离线)').classes('text-xs text-red-500 font-bold tracking-wide')
                     render_sync_status()
 
                 with ui.column().classes('w-full gap-4 p-4 bg-[#111827]'):
                     with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-2 gap-4 items-stretch'):
-
                         with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                            snapshot_init = get_cached_snapshot()
-                            os_logo_url, _ = get_os_visual(snapshot_init['os'])
-
-                            cores = snapshot_init.get('cpu_cores')
-                            core_label = f"{cores} C" if cores else ''
-
-                            render_section_header(
-                                '系统信息',
-                                'developer_board',
-                                'text-blue-400',
-                                '操作系统 / 架构 / 在线时间',
-                                right_renderer=(lambda: ui.label(core_label).classes('text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md border border-blue-400/20')) if core_label else None
-                            )
-
-                            with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm transition-all hover:bg-slate-800/60 flex-nowrap'):
+                            snap = get_cached_snapshot()
+                            os_logo_url, _ = get_os_visual(snap['os'])
+                            render_section_header('系统信息', 'developer_board', 'text-blue-400', '操作系统 / 架构 / 在线时间', right_renderer=lambda: ui.label(f"{snap['cpu_cores']} C").classes('text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-md'))
+                            with ui.row().classes('w-full items-center justify-center gap-3 py-3 px-4 rounded-xl bg-slate-800/40 border border-slate-700 shadow-sm'):
                                 ui.element('img').props(f'src="{os_logo_url}"').classes('w-6 h-6 object-contain shrink-0')
-                                ui.label(snapshot_init['os']).classes('text-sm font-black text-slate-50 truncate')
-
-                            with ui.column().classes('w-full gap-3 flex-1 justify-center mt-1'):
-                                @ui.refreshable
-                                def render_sys_dyn():
-                                    snap = get_cached_snapshot()
-                                    with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                        ui.label('CPU 使用率').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-
-                                        pct = snap.get('cpu_usage_pct', 0.0)
-                                        bar_color = 'bg-emerald-500/80' if pct < 60 else ('bg-amber-500/80' if pct < 85 else 'bg-red-500/80')
-
-                                        with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                            ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
-                                            ui.label(f'{pct:.1f}%').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
-
-                                    render_metric_row('处理器架构', format_arch_text(snap.get('arch')), value_color='text-cyan-400')
-                                    render_metric_row('在线运行时间', snap.get('uptime', '--'), value_color='text-emerald-400')
-                                render_sys_dyn()
-
+                                ui.label(snap['os']).classes('text-sm font-black text-slate-50 truncate')
+                            @ui.refreshable
+                            def render_sys_dyn():
+                                snap = get_cached_snapshot()
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm'):
+                                    ui.label('CPU 使用率').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    pct = snap.get('cpu_usage_pct', 0.0)
+                                    bar_color = 'bg-emerald-500/80' if pct < 60 else ('bg-amber-500/80' if pct < 85 else 'bg-red-500/80')
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
+                                        ui.label(f'{pct:.1f}%').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white')
+                                render_metric_row('处理器架构', format_arch_text(snap['arch']), value_color='text-cyan-400')
+                                render_metric_row('在线运行时间', snap['uptime'], value_color='text-emerald-400')
+                            render_sys_dyn()
+                        
                         with ui.card().classes('w-full h-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
                             @ui.refreshable
                             def render_mem_card():
                                 snap = get_cached_snapshot()
-                                render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"{fmt_gb(snap['mem_total_gb'])}").classes('text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20'))
+                                render_section_header('内存信息', 'memory', 'text-green-400', '系统内存 / 缓存 / SWAP 使用情况', right_renderer=lambda: ui.label(f"{fmt_gb(snap['mem_total_gb'])}").classes('text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md'))
                                 with ui.column().classes('w-full flex-1 gap-3 justify-center mt-1'):
-
-                                    with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm'):
                                         ui.label('真实使用内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                        pct = snap.get('mem_usage_pct', 0.0)
-                                        val = fmt_gb(snap['mem_used_gb'])
+                                        pct, val = snap['mem_usage_pct'], fmt_gb(snap['mem_used_gb'])
                                         bar_color = 'bg-amber-500/80' if pct > 80 else 'bg-blue-500/80'
-                                        with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50'):
                                             ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
-                                            ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
-
-                                    with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                        ui.label('空闲内存').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                        free_pct = 100.0 - pct if pct > 0 else 100.0
-                                        val = fmt_gb(snap['mem_free_gb'])
-                                        bar_color = 'bg-emerald-500/80'
-                                        with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                            ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
-                                            ui.label(f'{val} ({free_pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
-
+                                            ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white')
                                     render_metric_row('系统缓存', fmt_gb(snap['mem_cache_gb']), value_color='text-teal-400')
-                                    render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"剩余 {fmt_gb(snap['swap_free_gb'])} · 使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
+                                    render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
                             render_mem_card()
-
-                    with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
-                        @ui.refreshable
-                        def render_disk_card():
-                            snap = get_cached_snapshot()
-                            render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snap['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
-                            with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-1'):
-                                render_metric_row('磁盘设备', snap.get('disk_device', '/'), value_color='text-indigo-400')
-
-                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                    ui.label('已用容量').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                    pct = snap.get('disk_usage_pct', 0.0)
-                                    val = fmt_gb(snap['disk_used_gb'])
-                                    bar_color = 'bg-orange-500/80' if pct > 85 else 'bg-amber-500/80'
-                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
-                                        ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
-
-                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
-                                    ui.label('空闲剩余').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
-                                    free_pct = 100.0 - pct if pct > 0 else 100.0
-                                    val = fmt_gb(snap['disk_free_gb'])
-                                    bar_color = 'bg-emerald-500/80'
-                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
-                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
-                                        ui.label(f'{val} ({free_pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
-                        render_disk_card()
-
+                
                 def safe_refresh():
                     try:
                         if not vps_container.is_deleted:
                             render_sync_status.refresh()
                             render_sys_dyn.refresh()
                             render_mem_card.refresh()
-                            render_disk_card.refresh()
-                    except:
-                        pass
-
+                    except: pass
                 ui.timer(2.0, safe_refresh)
 
             ui.element('div').classes('h-6 flex-shrink-0')
 
-            # 【终极修复 2】：抛弃 ui.card，用纯 div 接管弹性属性，设置一个健康的最小高度，让它绝不被压扁。
             with ui.element('div').classes('w-full flex-1 min-h-[300px] flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
-                
                 with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap flex-shrink-0'):
                     with ui.row().classes('items-center gap-2'):
                         ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
                         if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
                             ui.badge('Root 模式', color='teal').props('outline rounded size=xs')
-                        elif server_conf.get('user'):
-                            ui.badge('API 托管模式', color='blue').props('outline rounded size=xs')
                     with ui.row().classes('items-center gap-2 flex-wrap justify-end'):
                         from app.services.deployment import open_deploy_hysteria_dialog, open_deploy_snell_dialog, open_deploy_xhttp_dialog
-
                         ui.button('一键部署 XHTTP', icon='rocket_launch', on_click=lambda: open_deploy_xhttp_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
                         ui.button('一键部署 Hy2', icon='bolt', on_click=lambda: open_deploy_hysteria_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
                         ui.button('一键部署 Snell', icon='security', on_click=lambda: open_deploy_snell_dialog(server_conf, reload_and_refresh_ui)).props('unelevated').classes(btn_blue)
+                        
                         if has_manager_access:
                             async def on_add_success():
                                 ui.notify('添加节点成功')
@@ -601,13 +493,10 @@ PY'''
                         else:
                             ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
-                
                 with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b] flex-shrink-0').style(SINGLE_COLS_NO_PING):
                     ui.label('节点名称').classes('text-left pl-2')
-                    for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
-                        ui.label(h).classes('text-center')
+                    for h in ['类型', '流量', '协议', '端口', '状态', '操作']: ui.label(h).classes('text-center')
 
-                # 【终极修复 3】：绝对定位隔离法 (Absolute Wrapper Trick)。完全切断滚动条对外部容器高度的“勒索”，乖乖在内部铺满。
                 with ui.element('div').classes('w-full relative flex-1 min-h-0'):
                     with ui.element('div').classes('absolute inset-0 bg-[#0f172a]'):
                         with ui.scroll_area().classes('w-full h-full p-1'):
@@ -615,6 +504,5 @@ PY'''
 
             if has_manager_access and not NODES_DATA.get(server_conf['url']):
                 ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
-
 
 __all__ = ['render_single_server_view']
