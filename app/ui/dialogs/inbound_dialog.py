@@ -86,29 +86,37 @@ class InboundEditor:
     def _list_to_csv(values):
         return ', '.join([str(x).strip() for x in (values or []) if str(x).strip()])
 
-    def __init__(self, mgr, data=None, on_success=None):
+    def __init__(self, mgr, data=None, on_success=None, is_3x_ui=False):
         self.mgr = mgr
         self.cb = on_success
         self.is_edit = data is not None
+        self.is_3x_ui = is_3x_ui  # 核心状态：记录面板血统
 
         if not data:
             random_port = random.randint(10000, 65000)
+            # 智能初始化：针对 3x-ui 默认生成防阻断配置
+            default_email = f"{uuid.uuid4().hex[:8]}@fusion.com" if self.is_3x_ui else ''
+            
             self.d = {
                 'enable': True,
                 'remark': '',
                 'port': random_port,
-                'protocol': 'vmess',
+                'protocol': 'vless' if self.is_3x_ui else 'vmess',
                 'settings': {
-                    'clients': [{'id': str(uuid.uuid4()), 'alterId': 0, 'email': '', 'flow': ''}],
+                    'clients': [{'id': str(uuid.uuid4()), 'alterId': 0, 'email': default_email, 'flow': ''}],
                     'disableInsecureEncryption': False,
                 },
                 'streamSettings': {'network': 'tcp', 'security': 'none'},
-                'sniffing': {'enabled': True, 'destOverride': ['http', 'tls']},
+                # 【防坑神器】如果是 3x-ui，默认【关闭】Sniffing，防止 Surge 等客户端断流
+                'sniffing': {'enabled': not self.is_3x_ui, 'destOverride': ['http', 'tls']},
                 'total': 0,
                 'expiryTime': 0,
                 'tag': '',
                 'listen': '',
             }
+            if self.is_3x_ui:
+                self.d['settings']['clients'][0]['limitIp'] = 0
+                self.d['settings']['clients'][0]['subId'] = uuid.uuid4().hex[:16]
         else:
             self.d = data.copy()
 
@@ -138,6 +146,7 @@ class InboundEditor:
         self.stream.setdefault('tcpSettings', {'header': {'type': 'none', 'request': {'path': ['/'], 'headers': {'Host': []}}}})
         self.stream.setdefault('wsSettings', {'path': '/', 'headers': {'Host': ''}})
         self.stream.setdefault('grpcSettings', {'serviceName': '', 'multiMode': False})
+        self.stream.setdefault('xhttpSettings', {'mode': 'auto', 'path': '/', 'host': ''})
         self.stream.setdefault('tlsSettings', {'serverName': '', 'alpn': [], 'allowInsecure': False, 'certificates': []})
         self.stream.setdefault('realitySettings', {'serverName': '', 'publicKey': '', 'privateKey': '', 'shortId': '', 'spiderX': '/', 'fingerprint': 'chrome'})
 
@@ -152,7 +161,12 @@ class InboundEditor:
             for client in clients:
                 client.setdefault('id', str(uuid.uuid4()))
                 client.setdefault('alterId', 0)
-                client.setdefault('email', '')
+                if self.is_3x_ui:
+                    client.setdefault('email', f"{uuid.uuid4().hex[:8]}@fusion.com")
+                    client.setdefault('subId', uuid.uuid4().hex[:16])
+                    client.setdefault('limitIp', 0)
+                else:
+                    client.setdefault('email', '')
                 client.setdefault('flow', '')
             self.settings['clients'] = clients
             if protocol == 'vmess':
@@ -165,7 +179,12 @@ class InboundEditor:
                 clients = [{'password': uuid.uuid4().hex[:8], 'email': '', 'flow': ''}]
             for client in clients:
                 client.setdefault('password', uuid.uuid4().hex[:8])
-                client.setdefault('email', '')
+                if self.is_3x_ui:
+                    client.setdefault('email', f"{uuid.uuid4().hex[:8]}@fusion.com")
+                    client.setdefault('subId', uuid.uuid4().hex[:16])
+                    client.setdefault('limitIp', 0)
+                else:
+                    client.setdefault('email', '')
                 client.setdefault('flow', '')
             self.settings['clients'] = clients
         elif protocol == 'shadowsocks':
@@ -195,16 +214,17 @@ class InboundEditor:
 
     def build_ui(self, dlg):
         with ui.card().classes('w-full max-w-4xl p-0 flex flex-col gap-0 overflow-hidden shadow-2xl bg-[#1e293b] border border-slate-700'):
-            
             # --- 标题栏 ---
             with ui.row().classes('w-full justify-between items-center px-6 py-4 border-b border-slate-700 bg-[#0f172a]'):
-                ui.label('添加入站' if not self.is_edit else '编辑入站').classes('text-lg font-black text-slate-200 tracking-wide')
+                with ui.row().classes('items-center gap-2'):
+                    ui.label('添加入站' if not self.is_edit else '编辑入站').classes('text-lg font-black text-slate-200 tracking-wide')
+                    if self.is_3x_ui:
+                        ui.badge('3x-ui 专属特权开启', color='purple').props('outline rounded size=xs')
                 ui.button(icon='close', on_click=dlg.close).props('flat round dense color=grey')
 
             # --- 内容区 ---
             with ui.scroll_area().classes('w-full h-[65vh] px-8 py-6'):
                 with ui.column().classes('w-full gap-5'):
-                    
                     # Row 1: 备注 & 启用
                     with ui.row().classes('w-full gap-4 items-center no-wrap'):
                         with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
@@ -219,13 +239,12 @@ class InboundEditor:
                         with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                             self._make_label('协议：')
                             pro_opts = ['vmess', 'vless', 'trojan', 'shadowsocks', 'dokodemo-door', 'socks', 'http']
-                            self.pro = ui.select(pro_opts, value=self.d.get('protocol', 'vmess')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                             
+                            self.pro = ui.select(pro_opts, value=self.d.get('protocol', 'vmess')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                             def on_protocol_change(e):
                                 self.d['protocol'] = e.value
                                 self._normalize_protocol_settings()
                                 self.render_dynamic_settings.refresh()
-                            
                             self.pro.on_value_change(on_protocol_change)
 
                     # Row 3: 监听 IP
@@ -262,7 +281,6 @@ class InboundEditor:
     @ui.refreshable
     def render_dynamic_settings(self):
         protocol = self.d.get('protocol', 'vmess')
-        
         # 1. 协议专属认证配置
         with ui.column().classes('w-full gap-5'):
             if protocol in ['vmess', 'vless']:
@@ -273,6 +291,24 @@ class InboundEditor:
                         id_inp = ui.input(value=client.get('id', '')).classes('flex-1 min-w-0').props('dense outlined dark')
                         id_inp.on_value_change(lambda e, c=client: c.update({'id': e.value}))
                         ui.button(icon='casino', on_click=lambda inp=id_inp: inp.set_value(str(uuid.uuid4()))).props('flat dense padding=xs color=primary').tooltip('重新生成')
+
+                # 【3x-ui 专属客户管控台】
+                if self.is_3x_ui:
+                    with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('伪装邮箱：', '3x-ui 内部统计标识')
+                            em_inp = ui.input(value=client.get('email', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                            em_inp.on_value_change(lambda e, c=client: c.update({'email': e.value}))
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('设备 IP 限制：', '单用户同时在线 IP 限制, 0为不限制')
+                            lim_inp = ui.number(value=client.get('limitIp', 0), format='%.0f').classes('flex-1 min-w-0').props('dense outlined dark')
+                            lim_inp.on_value_change(lambda e, c=client: c.update({'limitIp': int(e.value or 0)}))
+                    with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('Sub ID：', '3x-ui 专属订阅参数')
+                            sub_inp = ui.input(value=client.get('subId', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                            sub_inp.on_value_change(lambda e, c=client: c.update({'subId': e.value}))
+                            ui.button(icon='casino', on_click=lambda inp=sub_inp: inp.set_value(uuid.uuid4().hex[:16])).props('flat dense padding=xs color=primary')
 
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     if protocol == 'vmess':
@@ -290,7 +326,7 @@ class InboundEditor:
                             flow_opts = ['', 'xtls-rprx-vision', 'xtls-rprx-vision-udp443']
                             flow_sel = ui.select(flow_opts, value=client.get('flow', '')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                             flow_sel.on_value_change(lambda e, c=client: c.update({'flow': e.value}))
-            
+
             elif protocol == 'trojan':
                 client = self.settings.get('clients', [{}])[0]
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
@@ -299,7 +335,25 @@ class InboundEditor:
                         pwd_inp = ui.input(value=client.get('password', '')).classes('flex-1 min-w-0').props('dense outlined dark')
                         pwd_inp.on_value_change(lambda e, c=client: c.update({'password': e.value}))
                         ui.button(icon='casino', on_click=lambda inp=pwd_inp: inp.set_value(uuid.uuid4().hex[:8])).props('flat dense padding=xs color=primary')
-            
+                
+                # 【3x-ui Trojan 管控台】
+                if self.is_3x_ui:
+                    with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('伪装邮箱：')
+                            em_inp = ui.input(value=client.get('email', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                            em_inp.on_value_change(lambda e, c=client: c.update({'email': e.value}))
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('设备 IP 限制：')
+                            lim_inp = ui.number(value=client.get('limitIp', 0), format='%.0f').classes('flex-1 min-w-0').props('dense outlined dark')
+                            lim_inp.on_value_change(lambda e, c=client: c.update({'limitIp': int(e.value or 0)}))
+                    with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                        with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                            self._make_label('Sub ID：')
+                            sub_inp = ui.input(value=client.get('subId', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                            sub_inp.on_value_change(lambda e, c=client: c.update({'subId': e.value}))
+                            ui.button(icon='casino', on_click=lambda inp=sub_inp: inp.set_value(uuid.uuid4().hex[:16])).props('flat dense padding=xs color=primary')
+
             elif protocol == 'shadowsocks':
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
@@ -312,15 +366,12 @@ class InboundEditor:
                         p_inp = ui.input(value=self.settings.get('password', '')).classes('flex-1 min-w-0').props('dense outlined dark')
                         p_inp.on_value_change(lambda e: self.settings.update({'password': e.value}))
                         ui.button(icon='casino', on_click=lambda inp=p_inp: inp.set_value(uuid.uuid4().hex[:10])).props('flat dense padding=xs color=primary')
-                
-                # 新增 SS 网络下拉框
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         self._make_label('网络：')
                         net_opts = ['tcp', 'udp', 'tcp,udp']
                         ss_net = ui.select(net_opts, value=self.settings.get('network', 'tcp,udp')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                         ss_net.on_value_change(lambda e: self.settings.update({'network': e.value}))
-            
             elif protocol == 'dokodemo-door':
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
@@ -331,22 +382,18 @@ class InboundEditor:
                         self._make_label('目标端口：')
                         p_num = ui.number(value=self.settings.get('port', 53), format='%.0f').classes('flex-1 min-w-0').props('dense outlined dark')
                         p_num.on_value_change(lambda e: self.settings.update({'port': int(e.value or 53)}))
-                
-                # 新增 DD 网络下拉框
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         self._make_label('网络：')
                         net_opts = ['tcp', 'udp', 'tcp,udp']
                         dd_net = ui.select(net_opts, value=self.settings.get('network', 'tcp,udp')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                         dd_net.on_value_change(lambda e: self.settings.update({'network': e.value}))
-            
             elif protocol == 'socks':
                 accounts = self.settings.get('accounts', [])
                 is_auth = self.settings.get('auth', 'noauth') == 'password'
                 if is_auth and not accounts:
                     accounts = [{'user': uuid.uuid4().hex[:8], 'pass': uuid.uuid4().hex[:8]}]
                     self.settings['accounts'] = accounts
-                
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         self._make_label('密码认证：')
@@ -357,7 +404,6 @@ class InboundEditor:
                                 self.settings['accounts'] = [{'user': uuid.uuid4().hex[:8], 'pass': uuid.uuid4().hex[:8]}]
                             self.render_dynamic_settings.refresh()
                         auth_sw.on_value_change(on_auth_change)
-                    
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         if is_auth:
                             self._make_label('用户名：')
@@ -367,14 +413,12 @@ class InboundEditor:
                             self._make_label('启用 udp：')
                             udp_sw = ui.switch(value=bool(self.settings.get('udp', False)))
                             udp_sw.on_value_change(lambda e: self.settings.update({'udp': bool(e.value)}))
-                
                 if is_auth:
                     with ui.row().classes('w-full gap-4 items-center no-wrap'):
                         with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                             self._make_label('密码：')
                             pwd_inp = ui.input(value=accounts[0].get('pass', '')).classes('flex-1 min-w-0').props('dense outlined dark')
                             pwd_inp.on_value_change(lambda e: accounts[0].update({'pass': e.value}))
-                            
                         with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                             self._make_label('启用 udp：')
                             udp_sw = ui.switch(value=bool(self.settings.get('udp', False)))
@@ -386,7 +430,6 @@ class InboundEditor:
                 if is_auth and not accounts:
                     accounts = [{'user': uuid.uuid4().hex[:8], 'pass': uuid.uuid4().hex[:8]}]
                     self.settings['accounts'] = accounts
-                
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         self._make_label('密码认证：')
@@ -398,7 +441,6 @@ class InboundEditor:
                                 self.settings['accounts'] = []
                             self.render_dynamic_settings.refresh()
                         auth_sw.on_value_change(on_http_auth_change)
-                        
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         if is_auth:
                             self._make_label('用户名：')
@@ -417,8 +459,10 @@ class InboundEditor:
         net_val = self.stream.get('network', 'tcp')
         with ui.row().classes('w-full gap-4 items-center no-wrap mt-2'):
             with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
-                self._make_label('传输：')
+                self._make_label('传输网络：')
                 net_opts = ['tcp', 'kcp', 'ws', 'http', 'quic', 'grpc']
+                if self.is_3x_ui:
+                    net_opts.append('xhttp')  # 3x-ui 专属神级伪装协议
                 net_sel = ui.select(net_opts, value=net_val).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
                 def on_net_change(e):
                     self.stream['network'] = e.value
@@ -438,7 +482,6 @@ class InboundEditor:
                             tcp_header['type'] = 'http' if e.value else 'none'
                             self.render_dynamic_settings.refresh()
                         http_sw.on_value_change(on_http_cam_change)
-                
                 if is_http:
                     tcp_req = tcp_header.setdefault('request', {})
                     with ui.row().classes('w-full gap-4 items-center no-wrap'):
@@ -450,7 +493,6 @@ class InboundEditor:
                             self._make_label('请求 Host：')
                             host_inp = ui.input(value=self._list_to_csv(tcp_req.setdefault('headers', {}).get('Host', []))).classes('flex-1 min-w-0').props('dense outlined dark')
                             host_inp.on_value_change(lambda e: tcp_req['headers'].update({'Host': self._csv_to_list(e.value)}))
-            
             elif net_val == 'ws':
                 ws = self.stream.setdefault('wsSettings', {})
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
@@ -462,7 +504,6 @@ class InboundEditor:
                         self._make_label('请求头 Host：')
                         w_host = ui.input(value=ws.get('headers', {}).get('Host', '')).classes('flex-1 min-w-0').props('dense outlined dark')
                         w_host.on_value_change(lambda e: ws.setdefault('headers', {}).update({'Host': e.value}))
-            
             elif net_val == 'grpc':
                 grpc = self.stream.setdefault('grpcSettings', {})
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
@@ -474,25 +515,42 @@ class InboundEditor:
                         self._make_label('multiMode：')
                         g_mul = ui.switch(value=bool(grpc.get('multiMode', False)))
                         g_mul.on_value_change(lambda e: grpc.update({'multiMode': bool(e.value)}))
+            elif net_val == 'xhttp' and self.is_3x_ui:
+                xh = self.stream.setdefault('xhttpSettings', {})
+                with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                    with ui.row().classes('w-1/3 items-center no-wrap gap-2'):
+                        self._make_label('Mode：')
+                        mode_opts = ['auto', 'h2', 'h3']
+                        m_sel = ui.select(mode_opts, value=xh.get('mode', 'auto')).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
+                        m_sel.on_value_change(lambda e: xh.update({'mode': e.value}))
+                    with ui.row().classes('w-1/3 items-center no-wrap gap-2'):
+                        self._make_label('Path：')
+                        xp = ui.input(value=xh.get('path', '/')).classes('flex-1 min-w-0').props('dense outlined dark')
+                        xp.on_value_change(lambda e: xh.update({'path': e.value or '/'}))
+                    with ui.row().classes('w-1/3 items-center no-wrap gap-2'):
+                        self._make_label('Host：')
+                        xhst = ui.input(value=xh.get('host', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                        xhst.on_value_change(lambda e: xh.update({'host': e.value}))
 
-        # 4. TLS 配置
+        # 4. TLS/底层安全 配置
         sec_val = self.stream.get('security', 'none')
-        is_tls = sec_val in ['tls', 'xtls', 'reality']
-        
         with ui.row().classes('w-full gap-4 items-center no-wrap mt-2'):
             with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
-                self._make_label('tls：')
-                tls_sw = ui.switch(value=is_tls)
-                def on_tls_change(e):
-                    self.stream['security'] = 'tls' if e.value else 'none'
+                self._make_label('底层安全：')
+                sec_opts = ['none', 'tls']
+                if self.is_3x_ui:
+                    sec_opts.append('reality') # 3x-ui 王牌特性
+                
+                sec_sel = ui.select(sec_opts, value=sec_val).classes('flex-1 min-w-0').props('dense outlined dark options-dense')
+                def on_sec_change(e):
+                    self.stream['security'] = e.value
                     self.render_dynamic_settings.refresh()
-                tls_sw.on_value_change(on_tls_change)
-        
-        if is_tls:
+                sec_sel.on_value_change(on_sec_change)
+
+        if sec_val == 'tls':
             tls = self.stream.setdefault('tlsSettings', {})
             certs = tls.get('certificates', []) if isinstance(tls.get('certificates', []), list) else []
             cert0 = certs[0] if certs else {}
-            
             with ui.column().classes('w-full gap-5'):
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
@@ -503,7 +561,6 @@ class InboundEditor:
                         self._make_label('ALPN：')
                         alpn_inp = ui.input(value=self._list_to_csv(tls.get('alpn', []))).classes('flex-1 min-w-0').props('dense outlined dark')
                         alpn_inp.on_value_change(lambda e: tls.update({'alpn': self._csv_to_list(e.value)}))
-                
                 with ui.row().classes('w-full gap-4 items-center no-wrap'):
                     with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
                         self._make_label('公钥文件路径：')
@@ -521,13 +578,36 @@ class InboundEditor:
                             certs[0]['keyFile'] = e.value
                             tls['certificates'] = certs
                         key_inp.on_value_change(update_key)
+        
+        elif sec_val == 'reality':
+            rea = self.stream.setdefault('realitySettings', {})
+            with ui.column().classes('w-full gap-5'):
+                with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                    with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                        self._make_label('目标网站 (SNI)：')
+                        sni_inp = ui.input(value=rea.get('serverName', 'www.microsoft.com')).classes('flex-1 min-w-0').props('dense outlined dark')
+                        sni_inp.on_value_change(lambda e: rea.update({'serverName': e.value}))
+                    with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                        self._make_label('Short ID：')
+                        sid_inp = ui.input(value=rea.get('shortId', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                        sid_inp.on_value_change(lambda e: rea.update({'shortId': e.value}))
+                        ui.button(icon='casino', on_click=lambda inp=sid_inp: inp.set_value(uuid.uuid4().hex[:8])).props('flat dense padding=xs color=primary')
+                with ui.row().classes('w-full gap-4 items-center no-wrap'):
+                    with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                        self._make_label('公钥 (pbk)：')
+                        pbk_inp = ui.input(value=rea.get('publicKey', '')).classes('flex-1 min-w-0').props('dense outlined dark')
+                        pbk_inp.on_value_change(lambda e: rea.update({'publicKey': e.value}))
+                    with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
+                        self._make_label('私钥 (面板内部)：')
+                        prv_inp = ui.input(value=rea.get('privateKey', '')).classes('flex-1 min-w-0').props('dense outlined dark type=password')
+                        prv_inp.on_value_change(lambda e: rea.update({'privateKey': e.value}))
 
-        # 5. 嗅探配置 (Sniffing)
-        is_sniff = bool(self.sniffing.get('enabled', True))
+        # 5. 嗅探配置 (Sniffing) - 防断流机制
+        is_sniff = bool(self.sniffing.get('enabled', not self.is_3x_ui))
         with ui.column().classes('w-full gap-5 mt-2'):
             with ui.row().classes('w-full gap-4 items-center no-wrap'):
                 with ui.row().classes('w-1/2 items-center no-wrap gap-2'):
-                    self._make_label('sniffing：', '流量嗅探，建议开启')
+                    self._make_label('sniffing：', '流量嗅探。部分客户端开启可能导致断流。')
                     snf_sw = ui.switch(value=is_sniff)
                     def on_snf_change(e):
                         self.sniffing['enabled'] = bool(e.value)
@@ -602,8 +682,6 @@ class InboundEditor:
             self.d['expiryTime'] = self._input_to_expiry(self.expiry_time.value)
             self.d['expiry_time'] = self.d['expiryTime']
             self.d['listen'] = (self.listen_input.value or '').strip()
-            
-            # The sniffing and tag values are auto-updated via events
             self.d['tag'] = self.d.get('tag', '')
 
             success, msg = False, ''
@@ -638,10 +716,11 @@ class InboundEditor:
             safe_notify(f'❌ 系统异常: {str(e)}', 'negative', timeout=6000)
 
 
-async def open_inbound_dialog(mgr, data, cb):
+async def open_inbound_dialog(mgr, data, cb, is_3x_ui=False):
+    # 接收并传递 is_3x_ui 状态
     with ui.dialog() as d:
-        InboundEditor(mgr, data, cb).build_ui(d)
-        d.open()
+        InboundEditor(mgr, data, cb, is_3x_ui).build_ui(d)
+    d.open()
 
 
 async def delete_inbound(mgr, id, cb):
