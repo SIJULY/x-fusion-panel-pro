@@ -112,7 +112,6 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
             ssh_fallback_data = {}
 
-            # --- 核心改动：把耗时 1~3 秒的 SSH 扫描完全解耦到独立后台任务中，保证页面瞬间渲染 ---
             def _fetch_runtime_via_ssh():
                 if not server_conf.get('ssh_host'):
                     return None
@@ -120,6 +119,7 @@ async def render_single_server_view(server_conf, force_refresh=False):
                 if not client:
                     return None
                 try:
+                    # 核心改动：用 SQLite 的表结构（基因）来绝对识别 3x-ui
                     remote_script = r'''python3 - <<'PY'
 import json, os, platform, multiprocessing
 info = {}
@@ -142,6 +142,8 @@ try:
         pass
         
     xui_path = None
+    is_3x_ui = False
+    
     import sqlite3
     for p in ['/etc/x-ui/x-ui.db', '/usr/local/x-ui/bin/x-ui.db', '/usr/local/x-ui/x-ui.db']:
         if os.path.exists(p):
@@ -149,8 +151,15 @@ try:
                 conn = sqlite3.connect(p)
                 res = conn.execute("SELECT value FROM settings WHERE key='webBasePath'").fetchone()
                 if res and res[0]: xui_path = res[0].strip('/')
+                
+                # 终极黑科技：查找 3x-ui 独有的 client_traffics 表或 subURI 字段
+                res_3x = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='client_traffics'").fetchone()
+                res_sub = conn.execute("SELECT value FROM settings WHERE key='subURI'").fetchone()
+                if res_3x or res_sub:
+                    is_3x_ui = True
+                    
                 conn.close()
-                if xui_path: break
+                if xui_path is not None: break
             except: pass
 
     info = {
@@ -158,7 +167,8 @@ try:
         'arch': platform.machine(),
         'cpu_cores': multiprocessing.cpu_count(),
         'uptime': uptime_text,
-        'xui_path': xui_path
+        'xui_path': xui_path,
+        'is_3x_ui': is_3x_ui
     }
 except Exception as e:
     info = {'error': str(e)}
@@ -184,17 +194,23 @@ PY'''
                 if isinstance(remote_data, dict):
                     ssh_fallback_data.update(remote_data)
                     
-                    # 发现路径后立刻修正、静默保存，并异步刷新节点列表
+                    need_save = False
+                    if 'is_3x_ui' in remote_data and server_conf.get('is_3x_ui') != remote_data['is_3x_ui']:
+                        server_conf['is_3x_ui'] = remote_data['is_3x_ui']
+                        need_save = True
+                    
                     if 'xui_path' in remote_data:
                         detected_prefix = f"/{remote_data['xui_path']}" if remote_data['xui_path'] else ""
                         if server_conf.get('prefix') != detected_prefix:
                             server_conf['prefix'] = detected_prefix
-                            asyncio.create_task(save_servers())
+                            need_save = True
                             logger.info(f"[AutoDetect] Server path automatically self-healed to: '{detected_prefix}'")
-                            if has_manager_access:
-                                asyncio.create_task(reload_and_refresh_ui())
+                            
+                    if need_save:
+                        asyncio.create_task(save_servers())
+                        if has_manager_access:
+                            asyncio.create_task(reload_and_refresh_ui())
 
-            # 核心：使用 ui.timer 让 SSH 探测进入后台，绝不阻塞当前 UI 线程
             ui.timer(0.1, run_ssh_fallback, once=True)
 
             def get_cached_snapshot():
@@ -314,7 +330,10 @@ PY'''
                                     async def on_edit_success():
                                         ui.notify('修改成功')
                                         await reload_and_refresh_ui()
-                                    ui.button(icon='edit', on_click=lambda i=n: open_inbound_dialog(mgr, i, on_edit_success)).props(btn_props).classes('text-blue-400 hover:bg-slate-600')
+                                        
+                                    # 核心改动：保证 lambda 调用时，获取的是 server_conf 里最新的 'is_3x_ui' 状态，而不是闭包写死的旧值
+                                    ui.button(icon='edit', on_click=lambda i=n: open_inbound_dialog(mgr, i, on_edit_success, is_3x_ui=server_conf.get('is_3x_ui', False))).props(btn_props).classes('text-blue-400 hover:bg-slate-600')
+                                    
                                     async def on_del_success():
                                         ui.notify('删除成功')
                                         await reload_and_refresh_ui()
@@ -489,7 +508,9 @@ PY'''
                             async def on_add_success():
                                 ui.notify('添加节点成功')
                                 await reload_and_refresh_ui()
-                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success)).props('unelevated').classes(btn_green)
+                            
+                            # 核心改动：保证 lambda 调用时获取最新的 'is_3x_ui' 状态
+                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success, is_3x_ui=server_conf.get('is_3x_ui', False))).props('unelevated').classes(btn_green)
                         else:
                             ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
