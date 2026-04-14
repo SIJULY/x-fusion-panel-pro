@@ -107,7 +107,7 @@ async def render_single_ssh_view(server_conf):
             terminal_state['instance'].channel.send(cmd_text + '\n')
             safe_notify(f'已发送: {cmd_text[:20]}...', 'positive')
         else:
-            safe_notify('SSH 正在连接，请稍后重试', 'warning')
+            safe_notify('SSH 正在连接或已断开，请稍后重试', 'warning')
 
     def open_cmd_editor(existing_cmd=None):
         with ui.dialog() as edit_d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-600 shadow-2xl'):
@@ -805,19 +805,57 @@ async def render_single_ssh_view(server_conf):
 
                             ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{display_ip}").classes('text-slate-100 font-bold')
                             ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
+                    
                     with ui.row().classes('items-center gap-2'):
                         ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props('outline color=grey').classes('text-slate-200')
 
-                with ui.row().classes('w-full items-center justify-between gap-3 px-4 py-2 bg-slate-800 border-b border-slate-700'):
+                # --- 终极修正：用 @ui.refreshable 绝对掌控按钮状态与颜色，并极致压缩边距 ---
+                conn_state = {'connected': True}
+
+                async def _do_reconnect():
+                    cleanup_ssh_route_terminal(server_key)
+                    safe_notify('⚡️ 正在重新连接 SSH...', 'ongoing')
+                    await _start_terminal(terminal_box)
+
+                def _do_disconnect():
+                    cleanup_ssh_route_terminal(server_key)
+                    terminal_box.clear()
+                    with terminal_box:
+                        with ui.column().classes('w-full h-full items-center justify-center text-slate-500 gap-2'):
+                            ui.icon('link_off', size='3rem').classes('text-slate-600')
+                            ui.label('SSH 已手动断开').classes('text-sm font-bold tracking-wider')
+                    safe_notify('⛓️‍💥 SSH 连接已掐断', 'warning')
+
+                def toggle_connection():
+                    if conn_state['connected']:
+                        _do_disconnect()
+                        conn_state['connected'] = False
+                    else:
+                        asyncio.create_task(_do_reconnect())
+                        conn_state['connected'] = True
+                    render_conn_btn.refresh()
+
+                @ui.refreshable
+                def render_conn_btn():
+                    if conn_state['connected']:
+                        btn = ui.button(icon='bolt', on_click=toggle_connection).props('flat dense round size=sm color=positive').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
+                        btn.tooltip('点击断开 SSH')
+                    else:
+                        btn = ui.button(icon='link_off', on_click=toggle_connection).props('flat dense round size=sm color=negative').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
+                        btn.tooltip('点击重连 SSH')
+
+                with ui.row().classes('w-full items-center justify-between px-4 py-1 bg-slate-800 border-b border-slate-700 min-h-[32px]'):
                     with ui.row().classes('items-center gap-2'):
                         ui.badge('独立路由终端', color='green').props('outline rounded')
                         ui.badge('交互模式', color='blue').props('outline rounded')
-                    ui.label('SSH 终端与文件管理已分区显示').classes('text-xs text-slate-400')
+                    render_conn_btn()
+                # ---------------------------------------------
 
                 terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style('height: 420px; min-height: 420px; position: relative;')
                 with terminal_box:
                     with ui.column().classes('w-full h-full items-center justify-center text-slate-500'):
                         ui.label('正在初始化 SSH 终端...').classes('text-sm')
+
 
             with ui.card().classes('w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
                 render_quick_commands()
