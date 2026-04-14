@@ -528,7 +528,7 @@ PY'''
                                         bar_color = 'bg-emerald-500/80'
                                         with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
                                             ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
-                                            ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                                            ui.label(f'{val} ({free_pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
 
                                     render_metric_row('系统缓存', fmt_gb(snap['mem_cache_gb']), value_color='text-teal-400')
                                     render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"剩余 {fmt_gb(snap['swap_free_gb'])} · 使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
@@ -558,7 +558,7 @@ PY'''
                                     bar_color = 'bg-emerald-500/80'
                                     with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
                                         ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
-                                        ui.label(f'{val}').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                                        ui.label(f'{val} ({free_pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
                         render_disk_card()
 
                 def safe_refresh():
@@ -602,7 +602,7 @@ PY'''
                     for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
                         ui.label(h).classes('text-center')
 
-                with ui.scroll_area().classes('w-full h-[264px] bg-[#0f172a] p-1 flex-shrink-0'):
+                with ui.scroll_area().classes('w-full h-[430px] bg-[#0f172a] p-1 flex-shrink-0'):
                     await render_node_list()
 
             if has_manager_access and not NODES_DATA.get(server_conf['url']):
