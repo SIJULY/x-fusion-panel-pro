@@ -31,10 +31,12 @@ async def render_single_server_view(server_conf, force_refresh=False):
 
     if content_container:
         content_container.clear()
-        content_container.classes(remove='overflow-y-auto block', add='h-full overflow-hidden flex flex-col p-4')
+        # 强制接管路由容器样式：禁止它自己滚动，改为 100% 弹性填满
+        content_container.classes(remove='overflow-y-auto block justify-start', add='h-full flex-1 min-h-0 overflow-hidden flex flex-col p-4')
 
     with content_container:
-        with ui.column().classes('w-full max-w-[1440px] mx-auto h-full flex flex-col gap-0 flex-nowrap'):
+        # 【终极修复 1】：追加 min-h-[calc(100vh-130px)] 强制兜底高度，无论如何也要撑到屏幕最底部！
+        with ui.element('div').classes('w-full max-w-[1440px] mx-auto h-full flex-1 min-h-[calc(100vh-130px)] flex flex-col gap-0 flex-nowrap'):
             has_manager_access = (server_conf.get('url') and server_conf.get('user') and server_conf.get('pass')) or (server_conf.get('probe_installed') and server_conf.get('ssh_host'))
             mgr = None
             if has_manager_access:
@@ -575,8 +577,10 @@ PY'''
 
             ui.element('div').classes('h-6 flex-shrink-0')
 
-            with ui.card().classes('w-full flex-shrink-0 flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
-                with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap'):
+            # 【终极修复 2】：抛弃 ui.card，用纯 div 接管弹性属性，设置一个健康的最小高度，让它绝不被压扁。
+            with ui.element('div').classes('w-full flex-1 min-h-[300px] flex flex-col p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-sm overflow-hidden bg-[#1e293b]'):
+                
+                with ui.row().classes('w-full items-center justify-between p-3 bg-[#0f172a] border-b border-slate-700 gap-3 flex-wrap flex-shrink-0'):
                     with ui.row().classes('items-center gap-2'):
                         ui.label('节点列表').classes('text-sm font-black text-slate-400 uppercase tracking-wide ml-1')
                         if server_conf.get('probe_installed') and server_conf.get('ssh_host'):
@@ -597,13 +601,17 @@ PY'''
                         else:
                             ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
-                with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b]').style(SINGLE_COLS_NO_PING):
+                
+                with ui.element('div').classes('grid w-full gap-4 font-bold text-slate-500 border-b border-slate-700 pb-2 pt-2 px-2 text-xs uppercase tracking-wider bg-[#1e293b] flex-shrink-0').style(SINGLE_COLS_NO_PING):
                     ui.label('节点名称').classes('text-left pl-2')
                     for h in ['类型', '流量', '协议', '端口', '状态', '操作']:
                         ui.label(h).classes('text-center')
 
-                with ui.scroll_area().classes('w-full h-[430px] bg-[#0f172a] p-1 flex-shrink-0'):
-                    await render_node_list()
+                # 【终极修复 3】：绝对定位隔离法 (Absolute Wrapper Trick)。完全切断滚动条对外部容器高度的“勒索”，乖乖在内部铺满。
+                with ui.element('div').classes('w-full relative flex-1 min-h-0'):
+                    with ui.element('div').classes('absolute inset-0 bg-[#0f172a]'):
+                        with ui.scroll_area().classes('w-full h-full p-1'):
+                            await render_node_list()
 
             if has_manager_access and not NODES_DATA.get(server_conf['url']):
                 ui.timer(0.2, lambda: asyncio.create_task(reload_and_refresh_ui()), once=True)
