@@ -366,7 +366,9 @@ def generate_detail_config(node, server_host):
         if protocol == 'vmess':
             clients = settings.get('clients') or [{}]
             uuid = clients[0].get('id', '')
-            line = f"{remark} = vmess, {address}, {port}, username={uuid}"
+            # 核心修复：强行加上 vmess-aead=true 治愈 Surge 的强迫症
+            line = f"{remark} = vmess, {address}, {port}, username={uuid}, vmess-aead=true"
+            
             if net == 'ws':
                 ws_set = stream.get('wsSettings', {})
                 path = ws_set.get('path', '/')
