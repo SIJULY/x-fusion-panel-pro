@@ -119,7 +119,6 @@ async def render_single_server_view(server_conf, force_refresh=False):
                 if not client:
                     return None
                 try:
-                    # 核心改动：用 SQLite 的表结构（基因）来绝对识别 3x-ui
                     remote_script = r'''python3 - <<'PY'
 import json, os, platform, multiprocessing
 info = {}
@@ -152,7 +151,6 @@ try:
                 res = conn.execute("SELECT value FROM settings WHERE key='webBasePath'").fetchone()
                 if res and res[0]: xui_path = res[0].strip('/')
                 
-                # 终极黑科技：查找 3x-ui 独有的 client_traffics 表或 subURI 字段
                 res_3x = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='client_traffics'").fetchone()
                 res_sub = conn.execute("SELECT value FROM settings WHERE key='subURI'").fetchone()
                 if res_3x or res_sub:
@@ -284,6 +282,7 @@ PY'''
                         ui.icon('inbox', size='4rem').classes('text-slate-600 mb-2')
                         ui.label(msg).classes('text-slate-500 text-sm')
                 else:
+                    is_3x_ui_status = server_conf.get('is_3x_ui', False)
                     for n in all_nodes:
                         is_custom = n.get('_is_custom', False)
                         is_ssh_mode = (not is_custom) and (server_conf.get('probe_installed') and server_conf.get('ssh_host'))
@@ -330,10 +329,7 @@ PY'''
                                     async def on_edit_success():
                                         ui.notify('修改成功')
                                         await reload_and_refresh_ui()
-                                        
-                                    # 核心改动：保证 lambda 调用时，获取的是 server_conf 里最新的 'is_3x_ui' 状态，而不是闭包写死的旧值
-                                    ui.button(icon='edit', on_click=lambda i=n: open_inbound_dialog(mgr, i, on_edit_success, is_3x_ui=server_conf.get('is_3x_ui', False))).props(btn_props).classes('text-blue-400 hover:bg-slate-600')
-                                    
+                                    ui.button(icon='edit', on_click=lambda i=n: open_inbound_dialog(mgr, i, on_edit_success, is_3x_ui=is_3x_ui_status)).props(btn_props).classes('text-blue-400 hover:bg-slate-600')
                                     async def on_del_success():
                                         ui.notify('删除成功')
                                         await reload_and_refresh_ui()
@@ -480,6 +476,35 @@ PY'''
                                     render_metric_row('系统缓存', fmt_gb(snap['mem_cache_gb']), value_color='text-teal-400')
                                     render_metric_row('SWAP 虚拟内存', f"{fmt_gb(snap['swap_used_gb'])} / {fmt_gb(snap['swap_total_gb'])}", f"使用率 {snap['swap_usage_pct']:.0f}%", value_color='text-purple-400')
                             render_mem_card()
+
+                    # ================= 核心修复：找回失踪的磁盘信息卡片 =================
+                    with ui.card().classes('w-full bg-[#0f172a] border border-slate-700 rounded-2xl shadow-md p-4 gap-4'):
+                        @ui.refreshable
+                        def render_disk_card():
+                            snap = get_cached_snapshot()
+                            render_section_header('磁盘信息', 'storage', 'text-amber-400', '根分区容量、已用空间、剩余空间与占用率', right_renderer=lambda: ui.label(f"{fmt_gb(snap['disk_total_gb'])}").classes('text-xs font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-md border border-amber-400/20'))
+                            with ui.grid().classes('w-full grid-cols-1 lg:grid-cols-3 gap-4 mt-1'):
+                                render_metric_row('磁盘设备', snap.get('disk_device', '/'), value_color='text-indigo-400')
+
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('已用容量').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    pct = snap.get('disk_usage_pct', 0.0)
+                                    val = fmt_gb(snap['disk_used_gb'])
+                                    bar_color = 'bg-orange-500/80' if pct > 85 else 'bg-amber-500/80'
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {pct}%')
+                                        ui.label(f'{val} ({pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+
+                                with ui.row().classes('w-full items-center justify-between gap-4 px-4 py-3 rounded-xl bg-slate-800/55 border border-slate-700/80 shadow-sm transition-all hover:bg-slate-800/80 flex-nowrap'):
+                                    ui.label('空闲剩余').classes('text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 leading-none shrink-0')
+                                    free_pct = 100.0 - pct if pct > 0 else 100.0
+                                    val = fmt_gb(snap['disk_free_gb'])
+                                    bar_color = 'bg-emerald-500/80'
+                                    with ui.element('div').classes('w-1/2 max-w-[150px] ml-auto bg-slate-900 rounded-md h-[18px] relative overflow-hidden border border-slate-700/50 shrink-0'):
+                                        ui.element('div').classes(f'h-full {bar_color} transition-all duration-500').style(f'width: {free_pct}%')
+                                        ui.label(f'{val} ({free_pct:.0f}%)').classes('absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-md')
+                        render_disk_card()
+                    # =================================================================
                 
                 def safe_refresh():
                     try:
@@ -487,6 +512,7 @@ PY'''
                             render_sync_status.refresh()
                             render_sys_dyn.refresh()
                             render_mem_card.refresh()
+                            render_disk_card.refresh() # 补回刷新钩子
                     except: pass
                 ui.timer(2.0, safe_refresh)
 
@@ -509,8 +535,8 @@ PY'''
                                 ui.notify('添加节点成功')
                                 await reload_and_refresh_ui()
                             
-                            # 核心改动：保证 lambda 调用时获取最新的 'is_3x_ui' 状态
-                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success, is_3x_ui=server_conf.get('is_3x_ui', False))).props('unelevated').classes(btn_green)
+                            current_is_3x = server_conf.get('is_3x_ui', False)
+                            ui.button('新建 XUI 节点', icon='add', on_click=lambda: open_inbound_dialog(mgr, None, on_add_success, is_3x_ui=current_is_3x)).props('unelevated').classes(btn_green)
                         else:
                             ui.button('探针只读', icon='visibility', on_click=None).props('unelevated disabled').classes('bg-slate-700 text-slate-400 rounded-lg px-4 py-2 border-b-4 border-slate-800 text-xs font-bold opacity-70')
 
