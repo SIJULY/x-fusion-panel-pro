@@ -51,7 +51,6 @@ def detect_env():
 
 try:
     db_path, svc_name = detect_env()
-    # print(f"DEBUG: Detected {{db_path}} {{svc_name}}")
     
 {indented_code}
 except Exception as e:
@@ -210,6 +209,7 @@ print(f"SUCCESS (DB: {{db_path}})")
         }
         payload_json = json.dumps(payload)
 
+        # 核心修复点：将 update_map 的单括号改为了双大括号 {{ }}，避免 f-string 语法解析崩溃
         script = f"""
 params = json.loads(r'''{payload_json}''')
 
@@ -222,7 +222,7 @@ cur = con.cursor()
 cur.execute("PRAGMA table_info(inbounds)")
 columns = [info[1] for info in cur.fetchall()]
 
-update_map = {
+update_map = {{
     'remark': params['remark'],
     'port': params['port'],
     'protocol': params['protocol'],
@@ -234,16 +234,16 @@ update_map = {
     'listen': params['listen'],
     'tag': params['tag'],
     'sniffing': params['sniffing'],
-}
+}}
 
 assignments = []
 values = []
 for key, value in update_map.items():
     if key in columns:
-        assignments.append(f"{key}=?")
+        assignments.append(f"{{key}}=?")
         values.append(value)
 
-sql = f"UPDATE inbounds SET {', '.join(assignments)} WHERE id=?"
+sql = f"UPDATE inbounds SET {{', '.join(assignments)}} WHERE id=?"
 values.append(params['id'])
 cur.execute(sql, tuple(values))
 
