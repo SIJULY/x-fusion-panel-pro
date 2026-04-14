@@ -1,6 +1,6 @@
 # X-Fusion Panel
 
-X-Fusion Panel 是一个面向 **X-UI / VPS / 节点运维场景** 的可视化管理面板，基于 **NiceGUI + FastAPI + Paramiko** 构建。
+X-Fusion Panel 是一个面向 **X-UI / VPS / 运维场景** 的可视化管理面板，基于 **NiceGUI + FastAPI + Paramiko** 构建。
 
 ## 项目亮点
 
