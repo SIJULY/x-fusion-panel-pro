@@ -50,7 +50,8 @@ async def render_single_ssh_view(server_conf):
 
     if content_container:
         content_container.clear()
-        content_container.classes(remove='overflow-y-auto block', add='h-full min-h-0 overflow-hidden flex flex-col p-4 gap-4')
+        content_container.classes(remove='overflow-y-auto block',
+                                  add='h-full min-h-0 overflow-hidden flex flex-col p-4 gap-4')
 
     terminal_state = {'instance': None}
     file_state = {'current_path': '/', 'entries': [], 'loading': False}
@@ -114,8 +115,10 @@ async def render_single_ssh_view(server_conf):
             with ui.row().classes('w-full justify-between items-center mb-4'):
                 ui.label('管理快捷命令').classes('text-lg font-bold text-white')
                 ui.button(icon='close', on_click=edit_d.close).props('flat round dense color=grey')
-            name_input = ui.input('按钮名称', value=existing_cmd['name'] if existing_cmd else '').classes('w-full mb-3').props('outlined dense dark bg-color="slate-800"')
-            cmd_input = ui.textarea('执行命令', value=existing_cmd['cmd'] if existing_cmd else '').classes('w-full mb-4').props('outlined dense dark bg-color="slate-800" rows=4')
+            name_input = ui.input('按钮名称', value=existing_cmd['name'] if existing_cmd else '').classes(
+                'w-full mb-3').props('outlined dense dark bg-color="slate-800"')
+            cmd_input = ui.textarea('执行命令', value=existing_cmd['cmd'] if existing_cmd else '').classes(
+                'w-full mb-4').props('outlined dense dark bg-color="slate-800" rows=4')
 
             async def save():
                 name = name_input.value.strip()
@@ -142,10 +145,12 @@ async def render_single_ssh_view(server_conf):
 
             with ui.row().classes('w-full justify-between items-center mt-2'):
                 if existing_cmd:
-                    ui.button('删除', icon='delete', on_click=delete_current).classes('bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
+                    ui.button('删除', icon='delete', on_click=delete_current).classes(
+                        'bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
                 else:
                     ui.element('div')
-                ui.button('保存', icon='save', on_click=save).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
+                ui.button('保存', icon='save', on_click=save).classes(
+                    'bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
         edit_d.open()
 
     @ui.refreshable
@@ -156,11 +161,15 @@ async def render_single_ssh_view(server_conf):
             for cmd_obj in commands:
                 cmd_name = cmd_obj.get('name', '未命名')
                 cmd_text = cmd_obj.get('cmd', '')
-                with ui.element('div').classes('flex items-center bg-slate-700 rounded overflow-hidden border-b-2 border-slate-900 transition-all active:border-b-0 active:translate-y-[2px] hover:bg-slate-600'):
-                    ui.button(cmd_name, on_click=lambda c=cmd_text: exec_quick_cmd(c)).props('unelevated').classes('bg-transparent text-[11px] font-bold text-slate-300 px-3 py-1.5 hover:text-white rounded-none')
+                with ui.element('div').classes(
+                        'flex items-center bg-slate-700 rounded overflow-hidden border-b-2 border-slate-900 transition-all active:border-b-0 active:translate-y-[2px] hover:bg-slate-600'):
+                    ui.button(cmd_name, on_click=lambda c=cmd_text: exec_quick_cmd(c)).props('unelevated').classes(
+                        'bg-transparent text-[11px] font-bold text-slate-300 px-3 py-1.5 hover:text-white rounded-none')
                     ui.element('div').classes('w-[1px] h-4 bg-slate-500 opacity-50')
-                    ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props('flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
-            ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props('flat dense round size=sm color=green').tooltip('添加常用命令')
+                    ui.button(icon='settings', on_click=lambda c=cmd_obj: open_cmd_editor(c)).props(
+                        'flat dense size=xs').classes('text-slate-400 hover:text-white px-1 py-1.5 rounded-none')
+            ui.button(icon='add', on_click=lambda: open_cmd_editor(None)).props(
+                'flat dense round size=sm color=green').tooltip('添加常用命令')
 
     async def ensure_tree_children(path, force=False):
         path = normalize_remote_path(path)
@@ -305,7 +314,8 @@ async def render_single_ssh_view(server_conf):
         client = ui.context.client
 
         if remote_path not in editor_state['files']:
-            loading_notify = ui.notification(f'正在读取 {entry.get("name", basename(remote_path))}...', timeout=0, spinner=True)
+            loading_notify = ui.notification(f'正在读取 {entry.get("name", basename(remote_path))}...', timeout=0,
+                                             spinner=True)
             try:
                 result = await run.io_bound(read_remote_file, server_conf, remote_path)
                 content = result.get('content', '')
@@ -337,12 +347,17 @@ async def render_single_ssh_view(server_conf):
             with ui.dialog().props('seamless') as editor_d:
                 editor_state['dialog'] = editor_d
 
-                with ui.card().props(f'id="{card_id}"').classes('flex flex-col p-0 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-slate-600 bg-[#1e293b]') \
-                    .style('width: 900px; max-width: 95vw; height: 650px; max-height: 95vh; resize: both; overflow: hidden; position: fixed; top: 10vh; left: 15vw; margin: 0;'):
+                with ui.card().props(f'id="{card_id}"').classes(
+                        'flex flex-col p-0 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-slate-600 bg-[#1e293b]') \
+                        .style(
+                    'width: 900px; max-width: 95vw; height: 650px; max-height: 95vh; resize: both; overflow: hidden; position: fixed; top: 10vh; left: 15vw; margin: 0;'):
 
-                    with ui.row().props(f'id="{header_id}"').classes('w-full items-center justify-between bg-[#111827] cursor-move select-none flex-nowrap no-wrap shrink-0 border-b border-slate-700').style('min-height: 38px; padding-right: 8px;'):
+                    with ui.row().props(f'id="{header_id}"').classes(
+                            'w-full items-center justify-between bg-[#111827] cursor-move select-none flex-nowrap no-wrap shrink-0 border-b border-slate-700').style(
+                            'min-height: 38px; padding-right: 8px;'):
 
-                        with ui.row().classes('flex-grow flex-nowrap overflow-x-auto no-scrollbar gap-0 h-full items-end'):
+                        with ui.row().classes(
+                                'flex-grow flex-nowrap overflow-x-auto no-scrollbar gap-0 h-full items-end'):
                             @ui.refreshable
                             def render_editor_tabs():
                                 for p, f in editor_state['files'].items():
@@ -351,23 +366,33 @@ async def render_single_ssh_view(server_conf):
                                     txt_color = 'text-blue-400' if is_active else 'text-slate-400'
                                     border = 'border-t-2 border-blue-500' if is_active else 'border-t-2 border-transparent'
 
-                                    with ui.row().classes(f'{bg_color} {border} px-3 py-2 items-center gap-2 cursor-pointer border-r border-slate-700 transition-colors hover:bg-[#1e293b] flex-nowrap group').style('height: 100%;'):
+                                    with ui.row().classes(
+                                            f'{bg_color} {border} px-3 py-2 items-center gap-2 cursor-pointer border-r border-slate-700 transition-colors hover:bg-[#1e293b] flex-nowrap group').style(
+                                            'height: 100%;'):
                                         ui.icon('description', size='xs').classes(txt_color)
-                                        ui.label(f['name']).classes(f'text-[12px] {txt_color} truncate max-w-[180px] font-mono select-none').on('click', lambda _, path=p: switch_tab(path))
+                                        ui.label(f['name']).classes(
+                                            f'text-[12px] {txt_color} truncate max-w-[180px] font-mono select-none').on(
+                                            'click', lambda _, path=p: switch_tab(path))
 
                                         if f['content'] != f['saved_content']:
                                             ui.element('div').classes('w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0')
 
-                                        ui.icon('close', size='xs').classes('text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shrink-0').on('click', lambda _, path=p: close_tab(path))
+                                        ui.icon('close', size='xs').classes(
+                                            'text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shrink-0').on(
+                                            'click', lambda _, path=p: close_tab(path))
 
                             editor_state['refresh_tabs'] = render_editor_tabs.refresh
                             render_editor_tabs()
 
                         with ui.row().classes('gap-2 shrink-0 items-center pl-2'):
-                            ui.button('保存 (Save)', icon='save', on_click=save_active_file).props('flat dense').classes('text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
-                            ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes('text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
+                            ui.button('保存 (Save)', icon='save', on_click=save_active_file).props(
+                                'flat dense').classes(
+                                'text-green-400 font-bold bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 text-[12px]')
+                            ui.button('关闭 (Close)', icon='close', on_click=close_all).props('flat dense').classes(
+                                'text-slate-400 bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 hover:text-white text-[12px]')
 
-                    with ui.element('div').classes('w-full relative flex-grow bg-[#1e293b]').style('min-height: 0; flex: 1 1 auto;'):
+                    with ui.element('div').classes('w-full relative flex-grow bg-[#1e293b]').style(
+                            'min-height: 0; flex: 1 1 auto;'):
                         ui.element('div').props(f'id="{container_id}"').classes('absolute inset-0')
 
                     def on_sync(e):
@@ -377,7 +402,8 @@ async def render_single_ssh_view(server_conf):
                                 editor_state['refresh_tabs']()
 
                     ui.textarea().props('id="hidden-editor-sync"').classes('hidden').on_value_change(on_sync)
-                    ui.button('ready', on_click=lambda: switch_tab(editor_state['active_path'])).props('id="monaco-ready-btn"').classes('hidden')
+                    ui.button('ready', on_click=lambda: switch_tab(editor_state['active_path'])).props(
+                        'id="monaco-ready-btn"').classes('hidden')
 
             editor_d.open()
 
@@ -512,7 +538,8 @@ async def render_single_ssh_view(server_conf):
 
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
                 ui.button('取消', on_click=d.close).props('flat color=grey')
-                ui.button('删除', icon='delete', on_click=do_delete).classes('bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
+                ui.button('删除', icon='delete', on_click=do_delete).classes(
+                    'bg-red-600 text-white font-bold rounded-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-[2px]')
         d.open()
 
     def open_create_dialog(kind):
@@ -541,7 +568,8 @@ async def render_single_ssh_view(server_conf):
 
             with ui.row().classes('w-full justify-end gap-2 mt-4'):
                 ui.button('取消', on_click=d.close).props('flat color=grey')
-                ui.button('创建', icon='add', on_click=create_target).classes('bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
+                ui.button('创建', icon='add', on_click=create_target).classes(
+                    'bg-blue-600 text-white font-bold rounded-lg border-b-4 border-blue-800 active:border-b-0 active:translate-y-[2px]')
         d.open()
 
     def open_rename_dialog(entry):
@@ -549,7 +577,8 @@ async def render_single_ssh_view(server_conf):
         old_path = entry.get('path', '')
         with ui.dialog() as d, ui.card().classes('w-96 p-5 bg-[#1e293b] border border-slate-700'):
             ui.label('重命名').classes('text-lg font-bold text-white')
-            new_name_input = ui.input('新名称', value=old_name).classes('w-full').props('outlined dense dark bg-color="slate-800"')
+            new_name_input = ui.input('新名称', value=old_name).classes('w-full').props(
+                'outlined dense dark bg-color="slate-800"')
 
             async def do_rename():
                 new_name = new_name_input.value.strip()
@@ -587,8 +616,10 @@ async def render_single_ssh_view(server_conf):
         other_w = len(current_mode_str) > 8 and current_mode_str[8] == 'w'
         other_x = len(current_mode_str) > 9 and current_mode_str[9] in ('x', 't', 'T')
 
-        with ui.dialog() as d, ui.card().classes('w-80 p-0 bg-[#1e293b] border border-slate-700 shadow-2xl overflow-hidden rounded-lg'):
-            with ui.row().classes('w-full items-center justify-between px-4 py-2 bg-[#111827] border-b border-slate-700'):
+        with ui.dialog() as d, ui.card().classes(
+                'w-80 p-0 bg-[#1e293b] border border-slate-700 shadow-2xl overflow-hidden rounded-lg'):
+            with ui.row().classes(
+                    'w-full items-center justify-between px-4 py-2 bg-[#111827] border-b border-slate-700'):
                 with ui.row().classes('items-center gap-2'):
                     ui.element('div').classes('w-3 h-3 rounded-full bg-[#ff5f56]')
                     ui.element('div').classes('w-3 h-3 rounded-full bg-[#ffbd2e]')
@@ -597,7 +628,8 @@ async def render_single_ssh_view(server_conf):
                 ui.button(icon='close', on_click=d.close).props('flat round dense size=xs color=grey')
 
             with ui.column().classes('w-full p-5 gap-0'):
-                ui.label(filename).classes('text-xl font-bold text-white mb-4 truncate w-full border-b border-slate-700 pb-2')
+                ui.label(filename).classes(
+                    'text-xl font-bold text-white mb-4 truncate w-full border-b border-slate-700 pb-2')
 
                 state = {
                     'owner': {'r': owner_r, 'w': owner_w, 'x': owner_x},
@@ -608,17 +640,22 @@ async def render_single_ssh_view(server_conf):
                 def make_checkbox_group(title, key):
                     with ui.column().classes('w-full gap-1 mb-4'):
                         ui.label(title).classes('text-xs text-slate-400')
-                        with ui.row().classes('w-full gap-6 px-3 py-2 bg-[#0f1724] rounded-md border border-slate-700 items-center justify-start'):
-                            state[key]['r_chk'] = ui.checkbox('读取', value=state[key]['r']).classes('text-sm text-slate-200')
-                            state[key]['w_chk'] = ui.checkbox('写入', value=state[key]['w']).classes('text-sm text-slate-200')
-                            state[key]['x_chk'] = ui.checkbox('执行', value=state[key]['x']).classes('text-sm text-slate-200')
+                        with ui.row().classes(
+                                'w-full gap-6 px-3 py-2 bg-[#0f1724] rounded-md border border-slate-700 items-center justify-start'):
+                            state[key]['r_chk'] = ui.checkbox('读取', value=state[key]['r']).classes(
+                                'text-sm text-slate-200')
+                            state[key]['w_chk'] = ui.checkbox('写入', value=state[key]['w']).classes(
+                                'text-sm text-slate-200')
+                            state[key]['x_chk'] = ui.checkbox('执行', value=state[key]['x']).classes(
+                                'text-sm text-slate-200')
 
                 make_checkbox_group('所有者 (Owner)', 'owner')
                 make_checkbox_group('组 (Group)', 'group')
                 make_checkbox_group('其他 (Others)', 'other')
 
                 async def do_chmod():
-                    calc = lambda k: (4 if state[k]['r_chk'].value else 0) + (2 if state[k]['w_chk'].value else 0) + (1 if state[k]['x_chk'].value else 0)
+                    calc = lambda k: (4 if state[k]['r_chk'].value else 0) + (2 if state[k]['w_chk'].value else 0) + (
+                        1 if state[k]['x_chk'].value else 0)
 
                     new_mode = f"{calc('owner')}{calc('group')}{calc('other')}"
 
@@ -638,8 +675,10 @@ async def render_single_ssh_view(server_conf):
                         safe_notify(f'修改报错: {e}', 'negative')
 
                 with ui.row().classes('w-full justify-center gap-4 mt-2'):
-                    ui.button('确定', on_click=do_chmod).classes('bg-blue-600 text-white font-bold w-24 rounded-md').props('unelevated')
-                    ui.button('取消', on_click=d.close).classes('bg-[#23314a] text-slate-300 font-bold w-24 rounded-md').props('unelevated')
+                    ui.button('确定', on_click=do_chmod).classes(
+                        'bg-blue-600 text-white font-bold w-24 rounded-md').props('unelevated')
+                    ui.button('取消', on_click=d.close).classes(
+                        'bg-[#23314a] text-slate-300 font-bold w-24 rounded-md').props('unelevated')
 
         d.open()
 
@@ -663,31 +702,37 @@ async def render_single_ssh_view(server_conf):
     def make_open_handler(entry):
         async def handler(e=None):
             await handle_entry_open(entry)
+
         return handler
 
     def make_edit_handler(entry):
         async def handler(e=None):
             await open_file_editor(entry)
+
         return handler
 
     def make_download_handler(entry):
         async def handler(e=None):
             await download_entry(entry)
+
         return handler
 
     def make_delete_handler(entry):
         async def handler(e=None):
             await confirm_delete_entry(entry)
+
         return handler
 
     def make_rename_handler(entry):
         async def handler(e=None):
             open_rename_dialog(entry)
+
         return handler
 
     def make_chmod_handler(entry):
         async def handler(e=None):
             open_chmod_dialog(entry)
+
         return handler
 
     @ui.refreshable
@@ -704,10 +749,13 @@ async def render_single_ssh_view(server_conf):
 
             with ui.column().classes('w-full gap-0'):
                 with ui.row().classes(row_classes).style(f'padding-left: {5 + depth * 16}px'):
-                    ui.button(icon='expand_more' if is_expanded else 'chevron_right', on_click=lambda _, p=path: toggle_tree_node(p)).props('flat dense round size=xs color=grey').classes('!min-w-0 !p-0 opacity-80 shrink-0')
+                    ui.button(icon='expand_more' if is_expanded else 'chevron_right',
+                              on_click=lambda _, p=path: toggle_tree_node(p)).props(
+                        'flat dense round size=xs color=grey').classes('!min-w-0 !p-0 opacity-80 shrink-0')
 
                     ui.icon('folder_open' if is_expanded else 'folder').classes('text-amber-400 text-[16px] shrink-0')
-                    ui.label(display_name).classes('text-[13px] text-slate-200 cursor-pointer select-none truncate').on('click', lambda _, p=path: select_tree_node(p))
+                    ui.label(display_name).classes('text-[13px] text-slate-200 cursor-pointer select-none truncate').on(
+                        'click', lambda _, p=path: select_tree_node(p))
 
                 if loading:
                     ui.label('加载中...').classes('text-[11px] text-slate-500 ml-8 py-0.5')
@@ -725,7 +773,8 @@ async def render_single_ssh_view(server_conf):
         sorted_entries = sorted(entries, key=lambda x: (not x.get('is_dir'), x.get('name', '').lower()))
 
         with ui.column().classes('w-full gap-0 bg-[#0d1524] h-full overflow-hidden flex-nowrap'):
-            with ui.row().classes('w-full items-center px-2 py-1.5 text-[12px] text-slate-400 border-b border-slate-700 bg-[#131d2d] flex-nowrap no-wrap tracking-wider'):
+            with ui.row().classes(
+                    'w-full items-center px-2 py-1.5 text-[12px] text-slate-400 border-b border-slate-700 bg-[#131d2d] flex-nowrap no-wrap tracking-wider'):
                 ui.label('文件名').classes('w-[26%] border-r border-slate-700 pl-1 truncate')
                 ui.label('大小').classes('w-[12%] border-r border-slate-700 pl-1 truncate')
                 ui.label('类型').classes('w-[12%] border-r border-slate-700 pl-1 truncate')
@@ -750,22 +799,32 @@ async def render_single_ssh_view(server_conf):
                 row_classes = 'w-full items-center px-2 py-1.5 border-b border-[#182232] cursor-default transition-colors hover:bg-[#182234] flex-nowrap no-wrap'
 
                 with ui.row().classes(row_classes) as row:
-                    with ui.context_menu().classes('bg-[#1e293b] text-slate-200 border border-slate-700 text-[13px] font-bold min-w-[140px]'):
+                    with ui.context_menu().classes(
+                            'bg-[#1e293b] text-slate-200 border border-slate-700 text-[13px] font-bold min-w-[140px]'):
                         if is_dir:
-                            ui.menu_item('📂 打开 (Open)', on_click=make_open_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('📂 打开 (Open)', on_click=make_open_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
-                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes('hover:bg-slate-700 py-1')
-                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
+                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
-                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
+                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes(
+                                'text-red-400 hover:bg-slate-700 py-1')
                         else:
-                            ui.menu_item('📝 打开 / 编辑', on_click=make_edit_handler(item)).classes('hover:bg-slate-700 py-1')
-                            ui.menu_item('⬇️ 下载 (Download)', on_click=make_download_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('📝 打开 / 编辑', on_click=make_edit_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
+                            ui.menu_item('⬇️ 下载 (Download)', on_click=make_download_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
-                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes('hover:bg-slate-700 py-1')
-                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes('hover:bg-slate-700 py-1')
+                            ui.menu_item('✏️ 重命名 (Rename)', on_click=make_rename_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
+                            ui.menu_item('🔑 权限 (Chmod)', on_click=make_chmod_handler(item)).classes(
+                                'hover:bg-slate-700 py-1')
                             ui.separator().classes('bg-slate-600')
-                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes('text-red-400 hover:bg-slate-700 py-1')
+                            ui.menu_item('🗑️ 删除 (Delete)', on_click=make_delete_handler(item)).classes(
+                                'text-red-400 hover:bg-slate-700 py-1')
 
                     with ui.row().classes('w-[26%] items-center gap-1.5 min-w-0 flex-nowrap no-wrap pl-1'):
                         icon_name = 'folder' if is_dir else 'description'
@@ -790,24 +849,31 @@ async def render_single_ssh_view(server_conf):
 
     with content_container:
         with ui.column().classes('w-full max-w-[1440px] mx-auto h-full flex flex-col gap-0 flex-nowrap'):
-            with ui.card().classes('w-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
-                with ui.row().classes('w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
+            with ui.card().classes(
+                    'w-full p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0'):
+                with ui.row().classes(
+                        'w-full items-center justify-between px-4 py-3 border-b border-slate-700 bg-[#111827]'):
                     with ui.row().classes('items-center gap-3'):
                         ui.icon('terminal').classes('text-green-400')
                         with ui.column().classes('gap-0'):
-                            raw_host = server_conf.get('ssh_host') or server_conf.get('url', '').replace('http://', '').replace('https://', '').split(':')[0]
+                            raw_host = server_conf.get('ssh_host') or \
+                                       server_conf.get('url', '').replace('http://', '').replace('https://', '').split(
+                                           ':')[0]
                             display_ip = raw_host
                             if raw_host and not (':' in raw_host or raw_host.replace('.', '').isdigit()):
                                 try:
-                                    display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host), timeout=1.5)
+                                    display_ip = await asyncio.wait_for(run.io_bound(_sync_resolve_ip, raw_host),
+                                                                        timeout=1.5)
                                 except:
                                     display_ip = raw_host
 
-                            ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{display_ip}").classes('text-slate-100 font-bold')
+                            ui.label(f"SSH Console · {server_conf.get('ssh_user', 'root')}@{display_ip}").classes(
+                                'text-slate-100 font-bold')
                             ui.label(server_conf.get('name', '未命名服务器')).classes('text-xs text-slate-500')
-                    
+
                     with ui.row().classes('items-center gap-2'):
-                        ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props('outline color=grey').classes('text-slate-200')
+                        ui.button('返回详情', icon='arrow_back', on_click=_back_to_detail).props(
+                            'outline color=grey').classes('text-slate-200')
 
                 # --- 终极修正：用 @ui.refreshable 绝对掌控按钮状态与颜色，并极致压缩边距 ---
                 conn_state = {'connected': True}
@@ -838,42 +904,58 @@ async def render_single_ssh_view(server_conf):
                 @ui.refreshable
                 def render_conn_btn():
                     if conn_state['connected']:
-                        btn = ui.button(icon='bolt', on_click=toggle_connection).props('flat dense round size=sm color=positive').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
+                        btn = ui.button(icon='bolt', on_click=toggle_connection).props(
+                            'flat dense round size=sm color=positive').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
                         btn.tooltip('点击断开 SSH')
                     else:
-                        btn = ui.button(icon='link_off', on_click=toggle_connection).props('flat dense round size=sm color=negative').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
+                        btn = ui.button(icon='link_off', on_click=toggle_connection).props(
+                            'flat dense round size=sm color=negative').classes('p-1 m-0 min-h-0 min-w-0 transition-all')
                         btn.tooltip('点击重连 SSH')
 
-                with ui.row().classes('w-full items-center justify-between px-4 py-1 bg-slate-800 border-b border-slate-700 min-h-[32px]'):
+                with ui.row().classes(
+                        'w-full items-center justify-between px-4 py-1 bg-slate-800 border-b border-slate-700 min-h-[32px]'):
                     with ui.row().classes('items-center gap-2'):
                         ui.badge('独立路由终端', color='green').props('outline rounded')
                         ui.badge('交互模式', color='blue').props('outline rounded')
                     render_conn_btn()
                 # ---------------------------------------------
 
-                terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style('height: 420px; min-height: 420px; position: relative;')
+                terminal_box = ui.element('div').classes('w-full bg-black overflow-hidden').style(
+                    'height: 420px; min-height: 420px; position: relative;')
                 with terminal_box:
                     with ui.column().classes('w-full h-full items-center justify-center text-slate-500'):
                         ui.label('正在初始化 SSH 终端...').classes('text-sm')
 
-
-            with ui.card().classes('w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
+            with ui.card().classes(
+                    'w-full p-4 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
                 render_quick_commands()
 
-            with ui.card().classes('w-full h-[46vh] min-h-[420px] p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
-                with ui.row().classes('w-full items-center justify-between px-3 py-2 bg-[#131d2d] border-b border-slate-700 gap-2 flex-nowrap'):
-                    path_input = ui.input(value=file_state['current_path']).classes('flex-grow text-xs h-8 min-w-[200px]').props('dense outlined dark bg-color="slate-900"')
+            with ui.card().classes(
+                    'w-full h-[46vh] min-h-[420px] p-0 rounded-xl border border-slate-700 border-b-[4px] border-b-slate-800 shadow-lg overflow-hidden bg-slate-900 flex flex-col flex-shrink-0 mt-4'):
+                with ui.row().classes(
+                        'w-full items-center justify-between px-3 py-2 bg-[#131d2d] border-b border-slate-700 gap-2 flex-nowrap'):
+                    path_input = ui.input(value=file_state['current_path']).classes(
+                        'flex-grow text-xs h-8 min-w-[200px]').props('dense outlined dark bg-color="slate-900"')
 
                     with ui.row().classes('items-center gap-1 flex-nowrap no-wrap'):
-                        ui.button('历史').props('outline dense size=sm color=grey').classes('h-7 text-slate-400 border-slate-600 hidden sm:block')
-                        ui.button(icon='refresh', on_click=lambda: refresh_remote_dir(file_state['current_path'])).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('刷新')
-                        ui.button(icon='arrow_upward', on_click=go_parent_dir).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('返回上级')
+                        ui.button('历史').props('outline dense size=sm color=grey').classes(
+                            'h-7 text-slate-400 border-slate-600 hidden sm:block')
+                        ui.button(icon='refresh',
+                                  on_click=lambda: refresh_remote_dir(file_state['current_path'])).props(
+                            'flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('刷新')
+                        ui.button(icon='arrow_upward', on_click=go_parent_dir).props(
+                            'flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('返回上级')
 
-                        hidden_uploader = ui.upload(on_upload=handle_direct_upload, multiple=True).props('auto-upload').style('display: none;')
-                        ui.button(icon='file_upload', on_click=lambda: ui.run_javascript(f'document.getElementById("c{hidden_uploader.id}").querySelector("input[type=file]").click()')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('上传文件')
+                        hidden_uploader = ui.upload(on_upload=handle_direct_upload, multiple=True).props(
+                            'auto-upload').style('display: none;')
+                        ui.button(icon='file_upload', on_click=lambda: ui.run_javascript(
+                            f'document.getElementById("c{hidden_uploader.id}").querySelector("input[type=file]").click()')).props(
+                            'flat dense size=sm color=grey').classes('h-7 w-7 text-slate-400').tooltip('上传文件')
 
-                        ui.button(icon='create_new_folder', on_click=lambda: open_create_dialog('dir')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-green-400').tooltip('新建目录')
-                        ui.button(icon='note_add', on_click=lambda: open_create_dialog('file')).props('flat dense size=sm color=grey').classes('h-7 w-7 text-blue-400').tooltip('新建文件')
+                        ui.button(icon='create_new_folder', on_click=lambda: open_create_dialog('dir')).props(
+                            'flat dense size=sm color=grey').classes('h-7 w-7 text-green-400').tooltip('新建目录')
+                        ui.button(icon='note_add', on_click=lambda: open_create_dialog('file')).props(
+                            'flat dense size=sm color=grey').classes('h-7 w-7 text-blue-400').tooltip('新建文件')
 
                 with ui.row().classes('w-full min-h-0 flex-grow flex-nowrap no-wrap gap-0'):
                     with ui.column().classes('w-[25%] min-w-[150px] h-full border-r border-[#223048] bg-[#0f1724]'):
