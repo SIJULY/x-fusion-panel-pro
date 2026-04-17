@@ -184,13 +184,13 @@ docker compose up -d --build
 ### install.sh 一键安装
 
 ```bash README.md
-bash <(curl -Ls https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/SIJULY/x-fusion-panel/main/install.sh)
 ```
 
 或：
 
 ```bash README.md
-wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel-pro/main/install.sh
+wget -O install.sh https://raw.githubusercontent.com/SIJULY/x-fusion-panel/main/install.sh
 chmod +x install.sh
 ./install.sh
 ```
